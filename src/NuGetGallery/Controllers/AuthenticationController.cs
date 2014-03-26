@@ -38,7 +38,6 @@ namespace NuGetGallery
         /// <summary>
         /// Sign In\Register view
         /// </summary>
-        [RequireSsl]
         public virtual ActionResult LogOn(string returnUrl)
         {
             // I think it should be obvious why we don't want the current URL to be the return URL here ;)
@@ -54,7 +53,6 @@ namespace NuGetGallery
         }
 
         [HttpPost]
-        [RequireSsl]
         [ValidateAntiForgeryToken]
         public virtual async Task<ActionResult> SignIn(LogOnViewModel model, string returnUrl, bool linkingAccount)
         {
@@ -99,7 +97,6 @@ namespace NuGetGallery
         }
 
         [HttpPost]
-        [RequireSsl]
         [ValidateAntiForgeryToken]
         public async virtual Task<ActionResult> Register(LogOnViewModel model, string returnUrl, bool linkingAccount)
         {
