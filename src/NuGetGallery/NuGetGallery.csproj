@@ -38,8 +38,8 @@
     <OnBeforePackageUsingManifest>AddCustomSkipRules</OnBeforePackageUsingManifest>
     <AfterAddIisSettingAndFileContentsToSourceManifest>AddCustomSkipRules</AfterAddIisSettingAndFileContentsToSourceManifest>
     <!-- Due to known error (http://stackoverflow.com/questions/12576662/msdeploy-skip-rules-when-using-msbuild-publishprofile-with-visual-studio-2012)
-we should use MsDeployExe for delivery, if we want to skip only several folders  
-    <UseMsDeployExe>true</UseMsDeployExe>-->
+we should use MsDeployExe for delivery, if we want to skip only several folders  -->
+    <UseMsDeployExe>true</UseMsDeployExe>
   </PropertyGroup>  
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
