@@ -34,6 +34,13 @@
     <IISExpressUseClassicPipelineMode>false</IISExpressUseClassicPipelineMode>
     <CodeContractsAssemblyMode>0</CodeContractsAssemblyMode>
   </PropertyGroup>
+  <PropertyGroup>
+    <OnBeforePackageUsingManifest>AddCustomSkipRules</OnBeforePackageUsingManifest>
+    <AfterAddIisSettingAndFileContentsToSourceManifest>AddCustomSkipRules</AfterAddIisSettingAndFileContentsToSourceManifest>
+    <!-- Due to known error (http://stackoverflow.com/questions/12576662/msdeploy-skip-rules-when-using-msbuild-publishprofile-with-visual-studio-2012)
+we should use MsDeployExe for delivery, if we want to skip only several folders  
+    <UseMsDeployExe>true</UseMsDeployExe>-->
+  </PropertyGroup>  
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
     <DebugType>full</DebugType>
@@ -1488,6 +1495,27 @@
   <Target Name="MvcBuildViews" AfterTargets="AfterBuild" Condition="'$(MvcBuildViews)'=='true'">
     <AspNetCompiler VirtualPath="temp" PhysicalPath="$(WebProjectOutputDir)" />
   </Target>
+ <Target Name="AddCustomSkipRules">
+    <Message Text="*************************************************" Importance="high" />
+    <Message Text="Calling AddCustomSkipRules" Importance="high" />
+    <Message Text="*************************************************" Importance="high" />
+    <ItemGroup>
+      <MsDeploySkipRules Include="SkipDeleteUploadsFiles">
+        <SkipAction>Delete</SkipAction>
+        <ObjectName>filePath</ObjectName>
+        <AbsolutePath>App_Data</AbsolutePath>
+        <XPath>
+        </XPath>
+      </MsDeploySkipRules>
+      <MsDeploySkipRules Include="SkipDeleteUploadsFolder">
+        <SkipAction>Delete</SkipAction>
+        <ObjectName>dirPath</ObjectName>
+        <AbsolutePath>App_Data</AbsolutePath>
+        <XPath>
+        </XPath>
+      </MsDeploySkipRules>
+    </ItemGroup>
+  </Target>  
   <ProjectExtensions>
     <VisualStudio>
       <FlavorProperties GUID="{349c5851-65df-11da-9384-00065b846f21}">
