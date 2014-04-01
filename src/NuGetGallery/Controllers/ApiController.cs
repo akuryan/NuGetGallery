@@ -329,8 +329,13 @@ namespace NuGetGallery
 
         public virtual async Task<ActionResult> ServiceAlert()
         {
+#if DEBUG
             var alert = await ContentService.GetContentItemAsync(Constants.ContentNames.Alert, TimeSpan.Zero);
             return Content(alert == null ? (string)null : alert.ToString(), "text/html");
+#else
+            await ContentService.GetContentItemAsync(Constants.ContentNames.Alert, TimeSpan.Zero);
+            return null;
+#endif
         }
 
         protected override void OnException(ExceptionContext filterContext)
