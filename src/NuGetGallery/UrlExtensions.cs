@@ -74,7 +74,7 @@ namespace NuGetGallery
 
         public static string UndoPendingEdits(this UrlHelper url, IPackageVersionModel package)
         {
-            return url.Action(actionName: "UndoPendingEdits", controllerName: "Packages");
+            return url.Action(actionName: "UndoPendingEdits", controllerName: "Packages", routeValues: new { id = package.Id, version = package.Version });
         }
 
         public static string Package(this UrlHelper url, string id)
@@ -118,7 +118,7 @@ namespace NuGetGallery
         {
             string protocol = url.RequestContext.HttpContext.Request.IsSecureConnection ? "https" : "http";
             string result = url.RouteUrl(RouteName.Home, null, protocol: protocol);
-            result = result.TrimEnd('/') + VirtualPathUtility.ToAbsolute("~/Content/Images/packageDefaultIcon-50x50.png");
+            result = result.TrimEnd('/') + VirtualPathUtility.ToAbsolute("~/Content/Images/packageDefaultIcon-50x50.png", url.RequestContext.HttpContext.Request.ApplicationPath);
             return result;
         }
 
