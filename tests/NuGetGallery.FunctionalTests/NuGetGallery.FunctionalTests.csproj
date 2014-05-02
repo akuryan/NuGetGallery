@@ -51,6 +51,9 @@
     <Reference Include="Elmah">
       <HintPath>..\..\src\NuGetGallery\bin\Elmah.dll</HintPath>
     </Reference>
+    <Reference Include="FluentLinkChecker">
+      <HintPath>..\..\packages\FluentLinkChecker.1.0.0.10\lib\net40\FluentLinkChecker.dll</HintPath>
+    </Reference>
     <Reference Include="Microsoft.VisualStudio.QualityTools.UnitTestFramework, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
       <HintPath>C:\Program Files (x86)\Microsoft Visual Studio 11.0\Common7\IDE\PublicAssemblies\Microsoft.VisualStudio.QualityTools.UnitTestFramework.dll</HintPath>
@@ -63,9 +66,6 @@
     <Reference Include="NuGet.Core, Version=2.8.50320.36, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\..\packages\NuGet.Core.2.8.1\lib\net40-Client\NuGet.Core.dll</HintPath>
-    </Reference>
-    <Reference Include="NuGetGallery">
-      <HintPath>..\..\src\NuGetGallery\bin\NuGetGallery.dll</HintPath>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Configuration" />
@@ -80,7 +80,8 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Features\SearchTest.cs" />
-    <Compile Include="LoadTests\PackageDownloadTest.cs" />
+    <Compile Include="LinksTests\LinksTests.cs" />
+    <Compile Include="LoadTests\LoadTests.cs" />
     <Compile Include="WebUITests\AccountManagement\RegisterNewUserTest.cs" />
     <Compile Include="WebUITests\AssertAndValidationHelper.cs" />
     <Compile Include="ClientIntegrationTests\NuGetCommandLineTests.cs" />
