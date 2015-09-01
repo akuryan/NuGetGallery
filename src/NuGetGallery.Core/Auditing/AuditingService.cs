@@ -1,4 +1,6 @@
-﻿using System;
+﻿// Copyright (c) .NET Foundation. All rights reserved.
+// Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -17,7 +19,7 @@ namespace NuGetGallery.Auditing
 
         static AuditingService()
         {
-            var settings = new JsonSerializerSettings()
+            var settings = new JsonSerializerSettings
             {
                 DateFormatHandling = DateFormatHandling.IsoDateFormat,
                 DateTimeZoneHandling = DateTimeZoneHandling.Utc,
@@ -69,7 +71,9 @@ namespace NuGetGallery.Auditing
         {
             protected override Task<Uri> SaveAuditRecord(string auditData, string resourceType, string filePath, string action, DateTime timestamp)
             {
-                return Task.FromResult<Uri>(new Uri("http://auditing.local/" + resourceType + "/" + filePath + "/" + timestamp.ToString("s") + "-" + action.ToLowerInvariant()));
+                var uriString = string.Format("http://auditing.local/{0}/{1}/{2}-{3}", resourceType, filePath, timestamp.ToString("s"), action.ToLowerInvariant());
+                var uri = new Uri(uriString);
+                return Task.FromResult(uri);
             }
         }
     }

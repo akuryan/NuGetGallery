@@ -1,4 +1,6 @@
-﻿using System;
+﻿// Copyright (c) .NET Foundation. All rights reserved.
+// Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
@@ -106,6 +108,12 @@ namespace NuGetGallery
             await blob.UploadFromStreamAsync(packageFile);
             blob.Properties.ContentType = GetContentType(folderName);
             await blob.SetPropertiesAsync();
+        }
+
+        public async Task<bool> IsAvailableAsync()
+        {
+            var container = await GetContainer(Constants.PackagesFolderName);
+            return await container.ExistsAsync();
         }
 
         private async Task<ICloudBlobContainer> GetContainer(string folderName)

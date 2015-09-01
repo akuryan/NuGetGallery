@@ -1,4 +1,6 @@
-﻿using System;
+﻿// Copyright (c) .NET Foundation. All rights reserved.
+// Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
+using System;
 using System.Globalization;
 using System.Web;
 using System.Web.Mvc;
@@ -70,6 +72,19 @@ namespace NuGetGallery
             });
         }
 
+
+
+        public static string CuratedPackageList(this UrlHelper url, int page, string q, string curatedFeedName)
+        {
+            return url.Action("ListPackages", "CuratedFeeds", new
+            {
+                q,
+                page,
+                curatedFeedName
+            });
+
+        }
+
         public static string PackageList(this UrlHelper url)
         {
             return url.RouteUrl(RouteName.ListPackages);
@@ -130,7 +145,7 @@ namespace NuGetGallery
             string routeName = "v" + feedVersion + RouteName.DownloadPackage;
             string protocol = url.RequestContext.HttpContext.Request.IsSecureConnection ? "https" : "http";
             string result = url.RouteUrl(routeName, new { Id = id, Version = version }, protocol: protocol);
-            
+
             // Ensure trailing slashes for versionless package URLs, as a fix for package filenames that look like known file extensions
             return version == null ? EnsureTrailingSlash(result) : result;
         }
@@ -187,14 +202,36 @@ namespace NuGetGallery
             return url.RouteUrl(RouteName.UploadPackage);
         }
 
-        public static string User(this UrlHelper url, User user, string scheme = null)
+        public static string User(this UrlHelper url, User user, int page = 1, string scheme = null)
         {
-            string result = url.Action(
-                actionName: "Profiles", 
-                controllerName: "Users", 
-                routeValues: new { username = user.Username }, 
-                protocol: scheme);
-            return EnsureTrailingSlash(result);
+            string result;
+            if (page == 1)
+            {
+                result = url.Action(actionName: "Profiles",
+                                    controllerName: "Users",
+                                    routeValues: new { username = user.Username.TrimEnd() },
+                                    protocol: scheme);
+            }
+            else
+            {
+                result = url.Action(actionName: "Profiles",
+                                    controllerName: "Users",
+                                    routeValues: new { username = user.Username.TrimEnd(), page = page },
+                                    protocol: scheme);
+            }
+
+
+            return result;
+        }
+
+        public static string UserShowAllPackages(this UrlHelper url, string username, string scheme = null)
+        {
+            string result;
+                result = url.Action(actionName: "Profiles",
+                                    controllerName: "Users",
+                                    routeValues: new { username = username, showAllPackages = true },
+                                    protocol: scheme);
+            return result;
         }
 
         public static string EditPackage(this UrlHelper url, string id, string version)
@@ -210,9 +247,10 @@ namespace NuGetGallery
         public static string DeletePackage(this UrlHelper url, IPackageVersionModel package)
         {
             return url.Action(
-                actionName: "Delete", 
-                controllerName: "Packages", 
-                routeValues: new {
+                actionName: "Delete",
+                controllerName: "Packages",
+                routeValues: new
+                {
                     id = package.Id,
                     version = package.Version
                 });
@@ -225,8 +263,7 @@ namespace NuGetGallery
                 controllerName: "Packages",
                 routeValues: new
                 {
-                    id = package.Id,
-                    version = package.Version
+                    id = package.Id
                 });
         }
 
@@ -241,8 +278,8 @@ namespace NuGetGallery
             rvd["username"] = username;
             rvd["token"] = token;
             return url.Action(
-                action, 
-                controller, 
+                action,
+                controller,
                 rvd,
                 url.RequestContext.HttpContext.Request.Url.Scheme,
                 url.RequestContext.HttpContext.Request.Url.Host);

@@ -1,20 +1,13 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System.Net; 
-using NuGetGallery.FunctionTests.Helpers;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
-using FluentAutomation;
+﻿// Copyright (c) .NET Foundation. All rights reserved.
+// Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
+
 using FluentAutomation.Interfaces;
 
 namespace NuGetGallery.FunctionalTests.Fluent
 {
-    public static class ExtensionMethods  
+    public static class ExtensionMethods
     {
-
-        public static void LogOn(this INativeActionSyntaxProvider I, string userName, string password)
+        public static void LogOn(this IActionSyntaxProvider I, string userName, string password)
         {
             I.Open(UrlHelper.BaseUrl + "users/account/LogOn");
             I.Expect.Url(x => x.LocalPath.Contains("LogOn"));
@@ -24,10 +17,10 @@ namespace NuGetGallery.FunctionalTests.Fluent
             I.Wait(1);
         }
 
-        public static void UploadPackageUsingUI(this INativeActionSyntaxProvider I, string fullPackagePath)
+        public static void UploadPackageUsingUI(this IActionSyntaxProvider I, string fullPackagePath)
         {
             // Navigate to the Upload Package page.  This will fail if the user never uploaded the previous package, hence the error handling.
-            I.Open(String.Format(UrlHelper.UploadPageUrl));
+            I.Open(string.Format(UrlHelper.UploadPageUrl));
             try
             {
                 I.Expect.Url(x => x.AbsoluteUri.Contains("/packages/Upload"));
@@ -45,6 +38,5 @@ namespace NuGetGallery.FunctionalTests.Fluent
             I.Wait(5);
             I.Click("input[value='Upload']");
         }
-
     }
 }

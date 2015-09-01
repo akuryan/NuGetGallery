@@ -1,31 +1,35 @@
-﻿using System;
+﻿// Copyright (c) .NET Foundation. All rights reserved.
+// Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
+
+using System;
 using System.Globalization;
 using System.Linq;
 using System.Net.Mail;
 using System.Text;
 using System.Web;
 using AnglicanGeek.MarkdownMailer;
-using Elmah;
 using NuGetGallery.Authentication;
-using Glimpse.AspNet.AlternateType;
 using NuGetGallery.Configuration;
 
 namespace NuGetGallery
 {
     public class MessageService : IMessageService
     {
-        public IMailSender MailSender { get; protected set; }
-        public IAppConfiguration Config { get; protected set; }
-        public AuthenticationService AuthService { get; protected set; }
+        protected MessageService()
+        {
+        }
 
-        protected MessageService() { }
-
-        public MessageService(IMailSender mailSender, IAppConfiguration config, AuthenticationService authService) :this()
+        public MessageService(IMailSender mailSender, IAppConfiguration config, AuthenticationService authService)
+            : this()
         {
             MailSender = mailSender;
             Config = config;
             AuthService = authService;
         }
+
+        public IMailSender MailSender { get; protected set; }
+        public IAppConfiguration Config { get; protected set; }
+        public AuthenticationService AuthService { get; protected set; }
 
         public void ReportAbuse(ReportPackageRequest request)
         {
@@ -33,6 +37,8 @@ namespace NuGetGallery
             subject = request.FillIn(subject, Config);
             const string bodyTemplate = @"
 **Email:** {Name} ({Address})
+
+**Signature:** {Signature}
 
 **Package:** {Id}
 {PackageUrl}
@@ -52,7 +58,7 @@ namespace NuGetGallery
 ";
 
 
-            var body = new StringBuilder("");
+            var body = new StringBuilder();
             body.Append(request.FillIn(bodyTemplate, Config));
             body.AppendFormat(CultureInfo.InvariantCulture, @"
 
@@ -131,7 +137,7 @@ namespace NuGetGallery
 
 -----------------------------------------------
 <em style=""font-size: 0.8em;"">
-    To stop receiving contact emails as an owner of this package, sign in to the {4} and 
+    To stop receiving contact emails as an owner of this package, sign in to the {4} and
     [change your email notification settings]({5}).
 </em>";
 
@@ -165,7 +171,7 @@ namespace NuGetGallery
 
         public void SendNewAccountEmail(MailAddress toAddress, string confirmationUrl)
         {
-            string body = @"Thank you for registering with the {0}. 
+            string body = @"Thank you for registering with the {0}.
 We can't wait to see what packages you'll upload.
 
 So we can be sure to contact you, please verify your email address and click the following link:
@@ -179,7 +185,7 @@ The {0} Team";
                 CultureInfo.CurrentCulture,
                 body,
                 Config.GalleryOwner.DisplayName,
-                HttpUtility.UrlDecode(confirmationUrl),
+                HttpUtility.UrlDecode(confirmationUrl).Replace("_", "\\_"),
                 confirmationUrl);
 
             using (var mailMessage = new MailMessage())
@@ -195,7 +201,7 @@ The {0} Team";
 
         public void SendEmailChangeConfirmationNotice(MailAddress newEmailAddress, string confirmationUrl)
         {
-            string body = @"You recently changed your {0} email address. 
+            string body = @"You recently changed your {0} email address.
 
 To verify your new email address, please click the following link:
 
@@ -208,7 +214,7 @@ The {0} Team";
                 CultureInfo.CurrentCulture,
                 body,
                 Config.GalleryOwner.DisplayName,
-                HttpUtility.UrlDecode(confirmationUrl),
+                HttpUtility.UrlDecode(confirmationUrl).Replace("_", "\\_"),
                 confirmationUrl);
 
             using (var mailMessage = new MailMessage())
@@ -227,7 +233,7 @@ The {0} Team";
         {
             string body = @"Hi there,
 
-The email address associated to your {0} account was recently 
+The email address associated to your {0} account was recently
 changed from _{1}_ to _{2}_.
 
 Thanks,
@@ -284,7 +290,7 @@ The {0} Team";
 
             const string subject = "[{0}] The user '{1}' wants to add you as an owner of the package '{2}'.";
 
-            string body = @"The user '{0}' wants to add you as an owner of the package '{1}'. 
+            string body = @"The user '{0}' wants to add you as an owner of the package '{1}'.
 If you do not want to be listed as an owner of this package, simply delete this email.
 
 To accept this request and become a listed owner of the package, click the following URL:
@@ -311,9 +317,9 @@ The {3} Team";
         public void SendCredentialRemovedNotice(User user, Credential removed)
         {
             SendCredentialChangeNotice(
-                user, 
-                removed, 
-                Strings.Emails_CredentialRemoved_Body, 
+                user,
+                removed,
+                Strings.Emails_CredentialRemoved_Body,
                 Strings.Emails_CredentialRemoved_Subject);
         }
 
@@ -366,15 +372,16 @@ The {3} Team";
                 {
                     var senderCopy = new MailMessage(
                         Config.GalleryOwner,
-                        mailMessage.ReplyToList.First()) {
-                        Subject = mailMessage.Subject + " [Sender Copy]",
-                        Body = String.Format(
-                            CultureInfo.CurrentCulture,
-                            "You sent the following message via {0}: {1}{1}{2}",
-                            Config.GalleryOwner.DisplayName, 
-                            Environment.NewLine, 
-                            mailMessage.Body),
-                    };
+                        mailMessage.ReplyToList.First())
+                        {
+                            Subject = mailMessage.Subject + " [Sender Copy]",
+                            Body = String.Format(
+                                CultureInfo.CurrentCulture,
+                                "You sent the following message via {0}: {1}{1}{2}",
+                                Config.GalleryOwner.DisplayName,
+                                Environment.NewLine,
+                                mailMessage.Body),
+                        };
                     senderCopy.ReplyToList.Add(mailMessage.ReplyToList.First());
                     MailSender.Send(senderCopy);
                 }
@@ -382,7 +389,7 @@ The {3} Team";
             catch (SmtpException ex)
             {
                 // Log but swallow the exception
-                ErrorSignal.FromCurrentContext().Raise(ex);
+                QuietLog.LogHandledException(ex);
             }
         }
 

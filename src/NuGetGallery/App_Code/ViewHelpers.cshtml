@@ -1,10 +1,8 @@
 ﻿@using System.Web.Mvc
 @using Microsoft.Web.Helpers
-@using Microsoft.WindowsAzure.ServiceRuntime
 @using NuGetGallery
 @using NuGetGallery.Helpers
 @using NuGetGallery.Configuration
-@using Ninject
 
 @helper PreviousNextPager(IPreviousNextPager pager)
 {
@@ -121,23 +119,57 @@
     }
 }
 
+@helper InstrumentationScript()
+{
+    // Get instrumentation key
+    var config = DependencyResolver.Current.GetService<ConfigurationService>();
+    var iKey = config == null ? string.Empty : config.Current.AppInsightsInstrumentationKey;
+
+    if (!string.IsNullOrEmpty(iKey))
+    {
+        <!-- Telemetry -->
+        <script type="text/javascript">
+            var appInsights = window.appInsights || function (config) {
+                function s(config) {
+                    t[config] = function () {
+                        var i = arguments;
+                        t.queue.push(function () { t[config].apply(t, i) })
+                    }
+                }
+
+                var t = { config: config }, r = document, f = window, e = "script", o = r.createElement(e), i, u;
+                for (o.src = config.url || "//az416426.vo.msecnd.net/scripts/a/ai.0.js", r.getElementsByTagName(e)[0].parentNode.appendChild(o), t.cookie = r.cookie, t.queue = [], i = ["Event", "Exception", "Metric", "PageView", "Trace"]; i.length;) s("track" + i.pop());
+                return config.disableExceptionTracking || (i = "onerror", s("_" + i), u = f[i], f[i] = function (config, r, f, e, o) {
+                    var s = u && u(config, r, f, e, o);
+                    return s !== !0 && t["_" + i](config, r, f, e, o), s
+                }), t
+            }({
+                instrumentationKey: '@(iKey)'
+            });
+
+            window.appInsights = appInsights;
+            appInsights.trackPageView();
+        </script>
+    }
+}
+
 @helper ReleaseTag()
 {
     // Get Version info and gallery brand name
     var ver = ApplicationVersionHelper.GetVersion();
-    var config = Container.Kernel.TryGet<ConfigurationService>();
+    var config = DependencyResolver.Current.GetService<ConfigurationService>();
     string brand = config == null ? "" : config.Current.Brand;
 
     <p id="releaseTag">
         This is the @brand
         @if (ver.Present)
         {
-            @:, version @ver.Version.
+            @: version @ver.Version.
             if(!String.IsNullOrEmpty(ver.ShortCommit)) {
                 <text>
                     Deployed from
                     @if(ver.CommitUri != null) {
-                        @: <a href="@ver.CommitUri.AbsoluteUri">@ver.ShortCommit</a>.
+                        @: <a href="@ver.CommitUri.AbsoluteUri.Replace("git://github.com", "https://github.com")">@ver.ShortCommit</a>.
                     } else {
                         @: @ver.ShortCommit.
                     }
@@ -164,27 +196,18 @@
         
         @* A little quick-n-dirty code to display the current machine *@
         @* In Azure, we want the Instance ID. The Machine Name is total garbage *@
-        @try {
-            if(RoleEnvironment.IsAvailable) {
-                <text>You are on @RoleEnvironment.CurrentRoleInstance.Id.</text>
-            } else {
-                <text>You are on @Environment.MachineName.</text>
-            }
-        } catch(Exception) {
-            @* Azure SDK not installed so we can't even run RoleEnvironment.IsAvailable. Just use Machine Name *@
-            <text>You are on @Environment.MachineName.</text>
-        }
+        You are on @HostMachine.Name.
     </p>
 }
 
 @helper AnalyticsScript()
 {
-    var config = Container.Kernel.TryGet<ConfigurationService>();
+    var config = DependencyResolver.Current.GetService<ConfigurationService>();
     if(config != null) {
         var propertyId = config.Current.GoogleAnalyticsPropertyId;
         if (propertyId != null)
         {
-            @Analytics.GetGoogleHtml(propertyId)
+            @Analytics.GetGoogleAsyncHtml(propertyId)
         }
     }
 }

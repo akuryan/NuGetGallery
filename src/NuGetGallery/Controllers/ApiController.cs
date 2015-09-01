@@ -1,25 +1,42 @@
-﻿using System;
-using System.Collections.Generic;
+﻿// Copyright (c) .NET Foundation. All rights reserved.
+// Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
+
+using System;
 using System.Data;
 using System.Data.SqlClient;
 using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Net.Http;
+using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
-using System.Web;
+using System.Web.Hosting;
 using System.Web.Mvc;
 using System.Web.UI;
 using Newtonsoft.Json.Linq;
 using NuGet;
-using NuGetGallery.Authentication;
+using NuGetGallery.Configuration;
 using NuGetGallery.Filters;
 using NuGetGallery.Packaging;
 
 namespace NuGetGallery
 {
-    public partial class ApiController : AppController
+    public partial class ApiController
+        : AppController
     {
+        private const string _idKey = "id";
+        private const string _versionKey = "version";
+        private const string _ipAddressKey = "ipAddress";
+        private const string _userAgentKey = "userAgent";
+        private const string _operationKey = "operation";
+        private const string _dependentPackageKey = "dependentPackage";
+        private const string _projectGuidsKey = "projectGuids";
+        private const string _metricsDownloadEventMethod = "/DownloadEvent";
+        private const string _contentTypeJson = "application/json";
+        private readonly IAppConfiguration _config;
+
         public IEntitiesContext EntitiesContext { get; set; }
         public INuGetExeDownloaderService NugetExeDownloaderService { get; set; }
         public IPackageFileService PackageFileService { get; set; }
@@ -30,30 +47,10 @@ namespace NuGetGallery
         public ISearchService SearchService { get; set; }
         public IIndexingService IndexingService { get; set; }
         public IAutomaticallyCuratePackageCommand AutoCuratePackage { get; set; }
-        
-        protected ApiController() { }
+        public IStatusService StatusService { get; set; }
 
-        public ApiController(
-            IEntitiesContext entitiesContext,
-            IPackageService packageService,
-            IPackageFileService packageFileService,
-            IUserService userService,
-            INuGetExeDownloaderService nugetExeDownloaderService,
-            IContentService contentService,
-            IIndexingService indexingService,
-            ISearchService searchService,
-            IAutomaticallyCuratePackageCommand autoCuratePackage)
+        protected ApiController()
         {
-            EntitiesContext = entitiesContext;
-            PackageService = packageService;
-            PackageFileService = packageFileService;
-            UserService = userService;
-            NugetExeDownloaderService = nugetExeDownloaderService;
-            ContentService = contentService;
-            StatisticsService = null;
-            IndexingService = indexingService;
-            SearchService = searchService;
-            AutoCuratePackage = autoCuratePackage;
         }
 
         public ApiController(
@@ -66,8 +63,37 @@ namespace NuGetGallery
             IIndexingService indexingService,
             ISearchService searchService,
             IAutomaticallyCuratePackageCommand autoCuratePackage,
-            IStatisticsService statisticsService)
-            : this(entitiesContext, packageService, packageFileService, userService, nugetExeDownloaderService, contentService, indexingService, searchService, autoCuratePackage)
+            IStatusService statusService,
+            IAppConfiguration config)
+        {
+            EntitiesContext = entitiesContext;
+            PackageService = packageService;
+            PackageFileService = packageFileService;
+            UserService = userService;
+            NugetExeDownloaderService = nugetExeDownloaderService;
+            ContentService = contentService;
+            StatisticsService = null;
+            IndexingService = indexingService;
+            SearchService = searchService;
+            AutoCuratePackage = autoCuratePackage;
+            StatusService = statusService;
+            _config = config;
+        }
+
+        public ApiController(
+            IEntitiesContext entitiesContext,
+            IPackageService packageService,
+            IPackageFileService packageFileService,
+            IUserService userService,
+            INuGetExeDownloaderService nugetExeDownloaderService,
+            IContentService contentService,
+            IIndexingService indexingService,
+            ISearchService searchService,
+            IAutomaticallyCuratePackageCommand autoCuratePackage,
+            IStatusService statusService,
+            IStatisticsService statisticsService,
+            IAppConfiguration config)
+            : this(entitiesContext, packageService, packageFileService, userService, nugetExeDownloaderService, contentService, indexingService, searchService, autoCuratePackage, statusService, config)
         {
             StatisticsService = statisticsService;
         }
@@ -84,6 +110,7 @@ namespace NuGetGallery
                 return new HttpStatusCodeWithBodyResult(HttpStatusCode.BadRequest, "The format of the package id is invalid");
             }
 
+            // if version is non-null, check if it's semantically correct and normalize it.
             if (!String.IsNullOrEmpty(version))
             {
                 SemanticVersion dummy;
@@ -91,84 +118,127 @@ namespace NuGetGallery
                 {
                     return new HttpStatusCodeWithBodyResult(HttpStatusCode.BadRequest, "The package version is not a valid semantic version");
                 }
+                // Normalize the version
+                version = SemanticVersionExtensions.Normalize(version);
             }
-
-            // Normalize the version
-            version = SemanticVersionExtensions.Normalize(version);
-
-            // if the version is null, the user is asking for the latest version. Presumably they don't want includePrerelease release versions. 
-            // The allow prerelease flag is ignored if both partialId and version are specified.
-            // In general we want to try to add download statistics for any package regardless of whether a version was specified.
-
-            // Only allow database requests to take up to 5 seconds.  Any longer and we just lose the data; oh well.
-            EntitiesContext.SetCommandTimeout(5);
-
-            Package package = null;
-            try
+            else
             {
-                package = PackageService.FindPackageByIdAndVersion(id, version, allowPrerelease: false);
-                if (package == null)
-                {
-                    return new HttpStatusCodeWithBodyResult(
-                        HttpStatusCode.NotFound, String.Format(CultureInfo.CurrentCulture, Strings.PackageWithIdAndVersionNotFound, id, version));
-                }
-
+                // if version is null, get the latest version from the database.
+                // This ensures that on package restore scenario where version will be non null, we don't hit the database.
                 try
                 {
-                    var stats = new PackageStatistics
+                    var package = PackageService.FindPackageByIdAndVersion(id, version, allowPrerelease: false);
+                    if (package == null)
                     {
-                        IPAddress = Request.UserHostAddress,
-                        UserAgent = Request.UserAgent,
-                        Package = package,
-                        Operation = Request.Headers["NuGet-Operation"],
-                        DependentPackage = Request.Headers["NuGet-DependentPackage"],
-                        ProjectGuids = Request.Headers["NuGet-ProjectGuids"],
-                    };
+                       return new HttpStatusCodeWithBodyResult(HttpStatusCode.NotFound, String.Format(CultureInfo.CurrentCulture, Strings.PackageWithIdAndVersionNotFound, id, version));
+                    }
+                    version = package.NormalizedVersion;
 
-                    PackageService.AddDownloadStatistics(stats);
-                }
-                catch (ReadOnlyModeException)
-                {
-                    // *gulp* Swallowed. It's OK not to add statistics and ok to not log errors in read only mode.
                 }
                 catch (SqlException e)
                 {
-                    // Log the error and continue
                     QuietLog.LogHandledException(e);
+
+                    // Database was unavailable and we don't have a version, return a 503
+                    return new HttpStatusCodeWithBodyResult(HttpStatusCode.ServiceUnavailable, Strings.DatabaseUnavailable_TrySpecificVersion);
                 }
                 catch (DataException e)
                 {
-                    // Log the error and continue
                     QuietLog.LogHandledException(e);
+
+			        // Database was unavailable and we don't have a version, return a 503
+                    return new HttpStatusCodeWithBodyResult(HttpStatusCode.ServiceUnavailable, Strings.DatabaseUnavailable_TrySpecificVersion);
+                }
+
+            }
+
+            // If metrics service is specified we post the data to it asynchronously. Else we skip stats.
+            if (_config != null && _config.MetricsServiceUri != null)
+            {
+                try
+                {
+                    var userHostAddress = Request.UserHostAddress;
+                    var userAgent = Request.UserAgent;
+                    var operation = Request.Headers["NuGet-Operation"];
+                    var dependentPackage = Request.Headers["NuGet-DependentPackage"];
+                    var projectGuids = Request.Headers["NuGet-ProjectGuids"];
+
+                    HostingEnvironment.QueueBackgroundWorkItem(cancellationToken => PostDownloadStatistics(id, version, userHostAddress, userAgent, operation, dependentPackage, projectGuids, cancellationToken));
+                }
+                catch (Exception ex)
+                {
+                    QuietLog.LogHandledException(ex);
                 }
             }
-            catch (SqlException e)
-            {
-                QuietLog.LogHandledException(e);
-            }
-            catch (DataException e)
-            {
-                QuietLog.LogHandledException(e);
-            }
-            
-            // Fall back to constructing the URL based on the package version and ID.
-            if (String.IsNullOrEmpty(version) && package == null)
-            {
-                // Database was unavailable and we don't have a version, return a 503
-                return new HttpStatusCodeWithBodyResult(HttpStatusCode.ServiceUnavailable, Strings.DatabaseUnavailable_TrySpecificVersion);
-            }
+
             return await PackageFileService.CreateDownloadPackageActionResultAsync(
-                HttpContext.Request.Url, 
-                id, 
-                String.IsNullOrEmpty(version) ? package.NormalizedVersion : version);
+                HttpContext.Request.Url,
+                id, version);
         }
+
+        private static JObject GetJObject(string id, string version, string ipAddress, string userAgent, string operation, string dependentPackage, string projectGuids)
+        {
+            var jObject = new JObject();
+            jObject.Add(_idKey, id);
+            jObject.Add(_versionKey, version);
+            if (!String.IsNullOrEmpty(ipAddress)) jObject.Add(_ipAddressKey, ipAddress);
+            if (!String.IsNullOrEmpty(userAgent)) jObject.Add(_userAgentKey, userAgent);
+            if (!String.IsNullOrEmpty(operation)) jObject.Add(_operationKey, operation);
+            if (!String.IsNullOrEmpty(dependentPackage)) jObject.Add(_dependentPackageKey, dependentPackage);
+            if (!String.IsNullOrEmpty(projectGuids)) jObject.Add(_projectGuidsKey, projectGuids);
+
+            return jObject;
+        }
+
+        private async Task PostDownloadStatistics(string id, string version, string ipAddress, string userAgent, string operation, string dependentPackage, string projectGuids, CancellationToken cancellationToken)
+        {
+            if (_config == null || _config.MetricsServiceUri == null || cancellationToken.IsCancellationRequested)
+            {
+                return;
+            }
+
+            try
+            {
+                var jObject = GetJObject(id, version, ipAddress, userAgent, operation, dependentPackage, projectGuids);
+
+                using (var httpClient = new System.Net.Http.HttpClient())
+                {
+                    await httpClient.PostAsync(new Uri(_config.MetricsServiceUri, _metricsDownloadEventMethod), new StringContent(jObject.ToString(), Encoding.UTF8, _contentTypeJson), cancellationToken);
+                }
+            }
+            catch (WebException ex)
+            {
+                QuietLog.LogHandledException(ex);
+            }
+            catch (AggregateException ex)
+            {
+                QuietLog.LogHandledException(ex.InnerException ?? ex);
+            }
+            catch (TaskCanceledException)
+            {
+                // noop
+            }
+        }
+
 
         [HttpGet]
         [ActionName("GetNuGetExeApi")]
+        [RequireHttps]
         [OutputCache(VaryByParam = "none", Location = OutputCacheLocation.ServerAndClient, Duration = 600)]
         public virtual Task<ActionResult> GetNuGetExe()
         {
             return NugetExeDownloaderService.CreateNuGetExeDownloadActionResultAsync(HttpContext.Request.Url);
+        }
+
+        [HttpGet]
+        [ActionName("StatusApi")]
+        public async virtual Task<ActionResult> Status()
+        {
+            if (StatusService == null)
+            {
+                return new HttpStatusCodeResult(HttpStatusCode.ServiceUnavailable, "Status service is unavailable");
+            }
+            return await StatusService.GetStatus();
         }
 
         [HttpGet]
@@ -222,7 +292,7 @@ namespace NuGetGallery
 
             using (var packageToPush = ReadPackageFromRequest())
             {
-                if (packageToPush.Metadata.MinClientVersion > typeof(Manifest).Assembly.GetName().Version)
+                if (packageToPush.Metadata.MinClientVersion > new Version("3.0.0.0"))
                 {
                     return new HttpStatusCodeWithBodyResult(HttpStatusCode.BadRequest, String.Format(
                         CultureInfo.CurrentCulture,
@@ -264,14 +334,7 @@ namespace NuGetGallery
                 using (Stream uploadStream = packageToPush.GetStream())
                 {
                     await PackageFileService.SavePackageFileAsync(package, uploadStream);
-                }
-
-                if (
-                    packageToPush.Metadata.Id.Equals(Constants.NuGetCommandLinePackageId,
-                                                     StringComparison.OrdinalIgnoreCase) && package.IsLatestStable)
-                {
-                    // If we're pushing a new stable version of NuGet.CommandLine, update the extracted executable.
-                    await NugetExeDownloaderService.UpdateExecutableAsync(packageToPush);
+                    IndexingService.UpdatePackage(package);
                 }
             }
 
@@ -327,15 +390,29 @@ namespace NuGetGallery
             return new EmptyResult();
         }
 
+        [OutputCache(Duration = 30, Location = OutputCacheLocation.ServerAndClient, VaryByParam = "*")]
         public virtual async Task<ActionResult> ServiceAlert()
         {
-#if DEBUG
-            var alert = await ContentService.GetContentItemAsync(Constants.ContentNames.Alert, TimeSpan.Zero);
-            return Content(alert == null ? (string)null : alert.ToString(), "text/html");
-#else
-            await ContentService.GetContentItemAsync(Constants.ContentNames.Alert, TimeSpan.Zero);
-            return null;
-#endif
+            var markdownContentFileExtension = NuGetGallery.ContentService.MarkdownContentFileExtension;
+            string alertString = null;
+            var alert = await ContentService.GetContentItemAsync(Constants.ContentNames.Alert, markdownContentFileExtension, TimeSpan.Zero);
+            if (alert != null)
+            {
+                alertString = alert.ToString().Replace("</div>", " - Check our <a href=\"http://status.nuget.org\">status page</a> for updates.</div>");
+            }
+
+            if (String.IsNullOrEmpty(alertString) && _config.ReadOnlyMode)
+            {
+                var readOnly = await ContentService.GetContentItemAsync(Constants.ContentNames.ReadOnly, markdownContentFileExtension, TimeSpan.Zero);
+                alertString = (readOnly == null) ? null : readOnly.ToString();
+            }
+            return Content(alertString, "text/html");
+        }
+
+        public virtual async Task<ActionResult> Team()
+        {
+            var team = await ContentService.GetContentItemAsync(Constants.ContentNames.Team, TimeSpan.FromHours(1));
+            return Content(team.ToString(), "application/json");
         }
 
         protected override void OnException(ExceptionContext filterContext)
@@ -378,10 +455,10 @@ namespace NuGetGallery
         {
             var query = GetService<IPackageIdsQuery>();
             return new JsonResult
-                {
-                    Data = (query.Execute(partialId, includePrerelease).ToArray()),
-                    JsonRequestBehavior = JsonRequestBehavior.AllowGet
-                };
+            {
+                Data = (query.Execute(partialId, includePrerelease).ToArray()),
+                JsonRequestBehavior = JsonRequestBehavior.AllowGet
+            };
         }
 
         [HttpGet]
@@ -390,10 +467,10 @@ namespace NuGetGallery
         {
             var query = GetService<IPackageVersionsQuery>();
             return new JsonResult
-                {
-                    Data = query.Execute(id, includePrerelease).ToArray(),
-                    JsonRequestBehavior = JsonRequestBehavior.AllowGet
-                };
+            {
+                Data = query.Execute(id, includePrerelease).ToArray(),
+                JsonRequestBehavior = JsonRequestBehavior.AllowGet
+            };
         }
 
         [HttpGet]

@@ -1,4 +1,4 @@
-[NuGet Gallery](http://nuget.org/) - Where packages are found 
+[NuGet Gallery](http://nuget.org/) — Where packages are found 
 =======================================================================
 This is an implementation of the NuGet Gallery and API. This serves as the back-end and community 
 website for the NuGet client. For information about the NuGet clients, visit http://nuget.codeplex.com/
@@ -9,7 +9,7 @@ website for the NuGet client. For information about the NuGet clients, visit htt
  1. Visual Studio 2013
  2. PowerShell 2.0 (comes with Windows 7+)
  3. [NuGet](http://docs.nuget.org/docs/start-here/installing-nuget)
- 4. [Windows Azure SDK v2.2](http://www.microsoft.com/windowsazure/sdk/) - Note that later versions may be supported, but will require you to manually upgrade the ".Cloud" projects in the solution.
+ 4. [Windows Azure SDK](http://www.microsoft.com/windowsazure/sdk/) - Note that you may have to manually upgrade the ".Cloud" projects in the solution if a different SDK version is used.
  5. (Optional, for unit tests) [xUnit for Visual Studio 2012 and 2013](http://visualstudiogallery.msdn.microsoft.com/463c5987-f82b-46c8-a97e-b1cde42b9099)
 2. Clone it!
     
@@ -21,9 +21,10 @@ website for the NuGet client. For information about the NuGet clients, visit htt
     .\build
     ```
 4. Set up the website in IIS Express!
- 1. We highly recommend using IIS Express. Use the [Web Platform Installer](microsoft.com/web) to install it if you don't have it already (it comes with recent versions of VS and WebMatrix though)
- 2. In an ADMIN powershell prompt, run the .\tools\Enable-LocalTestMe.ps1 file. It allows non-admins to host websites at: http://nuget.localtest.me, it configures an IIS Express site at that URL and creates a self-signed SSL certificate. For more information on localtest.me, check out [readme.localtest.me](readme.localtest.me)
- 3. If you're having trouble, go to the Project Properties for the Website project, click on the Web tab and change the URL to localhost:port where _port_ is some port number above 1024.
+ 1. We highly recommend using IIS Express. Use the [Web Platform Installer](http://microsoft.com/web) to install it if you don't have it already (it comes with recent versions of VS and WebMatrix though). Make sure to at least once run IIS Express as an administrator.
+ 2. In an ADMIN powershell prompt, run the `.\tools\Enable-LocalTestMe.ps1` file. It allows non-admins to host websites at: `http(s)://nuget.localtest.me`, it configures an IIS Express site at that URL and creates a self-signed SSL certificate. For more information on `localtest.me`, check out [readme.localtest.me](http://readme.localtest.me).
+ 3. If you're having trouble, go to the _Project Properties_ for the Website project, click on the _Web_ tab and change the URL to `localhost:port` where _port_ is some port number above 1024.
+ 4. When running the application using the Azure Compute emulator, you may have to edit the `.\src\NuGetGallery.Cloud\ServiceConfiguration.Local.cscfg` file and set the certificate thumbprint for the setting `SSLCertificate` to the certificate thumbprint of the generated `nuget.localtest.me` certificate from step 2. You can get a list of certificates and their thumbprints using PowerShell, running `Get-ChildItem -path cert:\LocalMachine\My`.
 
 5. Create the Database!
  1. Open Visual Studio 2013
@@ -33,7 +34,7 @@ website for the NuGet client. For information about the NuGet clients, visit htt
  5. Run the following command in the Package Manager Console:
  
     ```
-    Update-Database
+    Update-Database -StartUpProjectName NuGetGallery
     ```
 If this fails, you are likely to get more useful output by passing -Debug than -Verbose.
 
@@ -66,7 +67,7 @@ To contribute to the gallery, make sure to create a fork first. Make your change
 the Git Workflow. When you are done with your changes, send us a pull request.
 
 ## Copyright and License
-Copyright 2011 Outercurve Foundation
+Copyright 2015 .NET Foundation
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this work except in compliance with 
 the License. You may obtain a copy of the License in the LICENSE file, or at:

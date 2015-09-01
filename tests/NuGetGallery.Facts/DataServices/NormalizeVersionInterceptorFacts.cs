@@ -1,18 +1,17 @@
-﻿using System;
+﻿// Copyright (c) .NET Foundation. All rights reserved.
+// Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
+
+using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Linq.Expressions;
-using System.Text;
-using System.Threading.Tasks;
 using Xunit;
-using Xunit.Extensions;
 
 namespace NuGetGallery.DataServices
 {
     public class NormalizeVersionInterceptorFacts
     {
         [Theory]
-        [PropertyData("NonBinaryExpressions")]
+        [MemberData("NonBinaryExpressions")]
         public void ItReturnsNonBinaryExpressions(Expression expr)
         {
             // Arrange
@@ -26,7 +25,7 @@ namespace NuGetGallery.DataServices
         }
 
         [Theory]
-        [PropertyData("NonEqualityCheckExpressions")]
+        [MemberData("NonEqualityCheckExpressions")]
         public void ItReturnsNonEqualityCheckExpressions(Expression expr)
         {
             // Arrange
@@ -40,7 +39,7 @@ namespace NuGetGallery.DataServices
         }
 
         [Theory]
-        [PropertyData("NonMatchingExpressions")]
+        [MemberData("NonMatchingExpressions")]
         public void ItReturnsNonMatchingExpressions(Expression expr)
         {
             // Arrange
@@ -65,7 +64,7 @@ namespace NuGetGallery.DataServices
 
             // Assert
             Assert.Equal(
-                ((Expression<Func<V2FeedPackage, bool>>)(p => "1.0.2" == p.NormalizedVersion)).ToString(), 
+                ((Expression<Func<V2FeedPackage, bool>>)(p => "1.0.2" == p.NormalizedVersion)).ToString(),
                 result.ToString());
         }
 
@@ -81,7 +80,7 @@ namespace NuGetGallery.DataServices
 
             // Assert
             Assert.Equal(
-                ((Expression<Func<V2FeedPackage, bool>>)(p => "1.0.2" == p.NormalizedVersion)).ToString(), 
+                ((Expression<Func<V2FeedPackage, bool>>)(p => "1.0.2" == p.NormalizedVersion)).ToString(),
                 result.ToString());
         }
 

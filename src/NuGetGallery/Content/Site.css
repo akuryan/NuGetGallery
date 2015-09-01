@@ -66,10 +66,16 @@ h6 {
     font-size: 1em;
 }
 
-    h1 img, h2 img, h3 img,
-    h4 img, h5 img, h6 img {
-        margin: 0;
-    }
+
+small {
+    font-size: 0.5em;
+}
+
+
+h1 img, h2 img, h3 img,
+h4 img, h5 img, h6 img {
+    margin: 0;
+}
 
 /* Page Headings*/
 
@@ -252,24 +258,6 @@ nav, section {
     width: 265px;
 }
 
-
-/* Logo */
-
-#logo {
-    float: left;
-    padding: 20px 20px 0 0;
-}
-
-    #logo a {
-        background: url(../Content/Images/nugetlogo.png) no-repeat;
-        display: block;
-        height: 75px;
-        margin: 0;
-        padding: 0;
-        text-indent: -9999px;
-        width: 345px;
-    }
-
 /* Body */
 
 #body {
@@ -346,7 +334,7 @@ p.authors {
 }
 
 .stat-number {
-    font: 2.3em 'andale mono', 'lucida console', monospace;
+    font: 2em 'andale mono', 'lucida console', monospace;
     letter-spacing: 1px;
     line-height: 1.4em;
     margin: 0;
@@ -448,6 +436,10 @@ p.authors {
 
 /* List Packages Page */
 
+.smaller {
+    font-size: 0.85em;
+}
+
 .search h1 {
     font-size: 2.3em;
     margin: 0;
@@ -499,7 +491,17 @@ section.package {
         overflow: hidden;
     }
 
-    section.package div.minimum-client-version {
+    section.package article > :first-child {
+        font-style: italic;
+    }
+
+        section.package article > :first-child small:last-child {
+            padding-left: 10px;
+            margin-left: 10px;
+            border-left: 1px solid #ccc;
+        }
+
+    section.package article > .minimum-client-version {
         float: right;
     }
 
@@ -1002,12 +1004,10 @@ fieldset.form {
 .field-hint-message,
 .field-validation-error {
     font-size: 1em;
-    left: 440px;
     line-height: 1.2em;
     padding: 5px;
-    position: absolute;
-    top: 30px;
-    width: 400px;
+    margin-top: 5px;
+    width: 416px;
     z-index: 550;
 }
 
@@ -1225,7 +1225,7 @@ ul.actionlist {
             padding: 0.5em;
             color: black;
             float: left;
-            height: 100px;
+            height: 120px;
         }
 
             ul.actionlist li.actionlist-item a.actionlist-item-link:hover {
@@ -1342,4 +1342,19 @@ span.sorted-by {
     font-size: 1.25em;
     margin: 0.5em;
     margin-left: 0;
+}
+
+ul#contributors {
+    display: none;
+}
+
+li.contributors-contributor {
+    display: inline-block;
+    padding: 5px;
+    margin: 0;
+}
+
+img.contributors-contributor-avatar {
+    width: 64px;
+    height: 64px;
 }

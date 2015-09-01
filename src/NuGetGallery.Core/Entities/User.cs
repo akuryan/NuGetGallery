@@ -1,11 +1,15 @@
-﻿using System;
+﻿// Copyright (c) .NET Foundation. All rights reserved.
+// Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
+
+using System;
 using System.Linq;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 
 namespace NuGetGallery
 {
-    public class User : IEntity
+    public class User
+        : IEntity
     {
         public User() : this(null)
         {
@@ -60,7 +64,7 @@ namespace NuGetGallery
 
         public void ConfirmEmailAddress()
         {
-            if (String.IsNullOrEmpty(UnconfirmedEmailAddress))
+            if (string.IsNullOrEmpty(UnconfirmedEmailAddress))
             {
                 throw new InvalidOperationException("User does not have an email address to confirm");
             }
@@ -69,11 +73,17 @@ namespace NuGetGallery
             UnconfirmedEmailAddress = null;
         }
 
+        public void CancelChangeEmailAddress()
+        {
+            EmailConfirmationToken = null;
+            UnconfirmedEmailAddress = null;
+        }
+
         public void UpdateEmailAddress(string newEmailAddress, Func<string> generateToken)
         {
-            if (!String.IsNullOrEmpty(UnconfirmedEmailAddress))
+            if (!string.IsNullOrEmpty(UnconfirmedEmailAddress))
             {
-                if (String.Equals(UnconfirmedEmailAddress, newEmailAddress, StringComparison.Ordinal))
+                if (string.Equals(UnconfirmedEmailAddress, newEmailAddress, StringComparison.Ordinal))
                 {
                     return; // already set as latest (unconfirmed) email address
                 }

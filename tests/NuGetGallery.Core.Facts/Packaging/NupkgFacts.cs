@@ -1,13 +1,14 @@
-﻿using System;
+﻿// Copyright (c) .NET Foundation. All rights reserved.
+// Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
+
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.Versioning;
 using Moq;
 using NuGet;
-using NuGetGallery.Packaging;
 using Xunit;
-using Xunit.Extensions;
 
 namespace NuGetGallery.Packaging
 {
@@ -243,7 +244,7 @@ namespace NuGetGallery.Packaging
                 // Arrange
                 var fakeStream = CreateTestPackageStream(b =>
                 {
-                    b.FrameworkReferences.Add(new FrameworkAssemblyReference("foo", new[] { 
+                    b.FrameworkReferences.Add(new FrameworkAssemblyReference("foo", new[] {
                         VersionUtility.ParseFrameworkName("net45"),
                         VersionUtility.ParseFrameworkName("sl-wp70")
                     }));
@@ -261,7 +262,7 @@ namespace NuGetGallery.Packaging
             }
 
             [Theory]
-            [PropertyData("AllTheFrameworks"/*!*/)]
+            [MemberData("AllTheFrameworks"/*!*/)]
             public void ReturnsFilePathFrameworksIfPresent(string directoryName, FrameworkName fxName)
             {
                 // Arrange

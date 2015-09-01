@@ -1,4 +1,6 @@
-﻿using System;
+﻿// Copyright (c) .NET Foundation. All rights reserved.
+// Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
+using System;
 using System.Collections.Generic;
 using System.Data.Entity;
 using System.Linq;
@@ -95,6 +97,14 @@ namespace NuGetGallery
             await Auditing.SaveAuditRecord(new UserAuditRecord(user, UserAuditAction.ChangeEmail, newEmailAddress));
 
             user.UpdateEmailAddress(newEmailAddress, Crypto.GenerateToken);
+            UserRepository.CommitChanges();
+        }
+
+        public async Task CancelChangeEmailAddress(User user)
+        {
+            await Auditing.SaveAuditRecord(new UserAuditRecord(user, UserAuditAction.CancelChangeEmail, user.UnconfirmedEmailAddress));
+
+            user.CancelChangeEmailAddress();
             UserRepository.CommitChanges();
         }
 

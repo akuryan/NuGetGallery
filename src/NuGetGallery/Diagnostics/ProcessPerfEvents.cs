@@ -1,4 +1,6 @@
-﻿using System;
+﻿// Copyright (c) .NET Foundation. All rights reserved.
+// Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -22,7 +24,7 @@ namespace NuGetGallery.Diagnostics
 
         public override Task Execute()
         {
-            return Task.WhenAll(Queues.Select(q => ProcessQueue(q)));
+            return new Task(() => Task.WaitAll(Queues.Select(q => ProcessQueue(q)).ToArray()));
         }
 
         private async Task ProcessQueue(string queue)

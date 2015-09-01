@@ -1,4 +1,6 @@
-﻿using System.Collections.Generic;
+﻿// Copyright (c) .NET Foundation. All rights reserved.
+// Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
+using System.Collections.Generic;
 namespace NuGetGallery
 {
     public static class Constants
@@ -44,8 +46,10 @@ namespace NuGetGallery
         {
             public static readonly string Home = "Home";
             public static readonly string Alert = "Alert";
+            public static readonly string ReadOnly = "ReadOnly";
             public static readonly string TermsOfUse = "Terms-Of-Use";
             public static readonly string PrivacyPolicy = "Privacy-Policy";
+            public static readonly string Team = "Team";
         }
     }
 }

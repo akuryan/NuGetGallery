@@ -1,31 +1,39 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<ServiceDefinition name="NuGetGallery.Cloud" xmlns="http://schemas.microsoft.com/ServiceHosting/2008/10/ServiceDefinition" schemaVersion="2013-10.2.2">
-  <LoadBalancerProbes>
+<ServiceDefinition name="NuGetGallery.Cloud" xmlns="http://schemas.microsoft.com/ServiceHosting/2008/10/ServiceDefinition" schemaVersion="2015-04.2.6">
+ <LoadBalancerProbes>
     <LoadBalancerProbe name="HTTP" path="/" protocol="http" port="80" />
   </LoadBalancerProbes>
-  <WebRole name="NuGetGallery" vmsize="Medium">
+   <!-- Size of the instances -->
+  <WebRole name="NuGetGallery" vmsize="ExtraLarge">
     <ConfigurationSettings>
       <Setting name="Gallery.Brand" />
       <Setting name="Gallery.Environment" />
       <Setting name="Gallery.RequireSSL" />
       <Setting name="Gallery.AzureStorageConnectionString" />
+      <Setting name="Gallery.AzureStorageReadAccessGeoRedundant" />
       <Setting name="Gallery.SqlServer" />
       <Setting name="Gallery.ConfirmEmailAddress" />
       <Setting name="Gallery.ReadOnlyMode" />
+      <Setting name="Gallery.FeedOnlyMode" />
       <Setting name="Gallery.StorageType" />
       <Setting name="Gallery.SmtpUri" />
       <Setting name="Gallery.FacebookAppId" />
+      <Setting name="Gallery.AppInsightsInstrumentationKey" />
       <Setting name="Gallery.SiteRoot" />
       <Setting name="Gallery.AzureCdnHost" />
       <Setting name="Gallery.LuceneIndexLocation" />
       <Setting name="Gallery.GoogleAnalyticsPropertyId" />
       <Setting name="Gallery.HasWorker" />
-      <Setting name="Gallery.SearchServiceUri" />
+      <Setting name="Gallery.ServiceDiscoveryUri" />
+      <Setting name="Gallery.SearchServiceResourceType" />
+      <Setting name="Gallery.MetricsServiceUri" />
       <Setting name="Gallery.AutoUpdateSearchIndex" />
+      <Setting name="Gallery.CollectPerfLogs" />
       <Setting name="Auth.MicrosoftAccount.Enabled" />
       <Setting name="Auth.MicrosoftAccount.ClientId" />
       <Setting name="Auth.MicrosoftAccount.ClientSecret" />
       <Setting name="Startup.BlockedIPs" />
+      <Setting name="Microsoft.WindowsAzure.Plugins.Diagnostics.ConnectionString" />
     </ConfigurationSettings>
     <Sites>
       <Site name="Web">
@@ -36,6 +44,7 @@
       </Site>
     </Sites>
     <Startup>
+      <Task commandLine="InstallDotNet452.cmd" executionContext="elevated" taskType="simple" />
       <Task commandLine="Startup.cmd" executionContext="elevated" taskType="simple" />
     </Startup>
     <Endpoints>
@@ -53,9 +62,9 @@
       </InstanceInputEndpoint>
     </Endpoints>
     <Imports>
-      <Import moduleName="Diagnostics" />
       <Import moduleName="RemoteAccess" />
       <Import moduleName="RemoteForwarder" />
+      <Import moduleName="Diagnostics" />
     </Imports>
     <Certificates>
       <Certificate name="SSLCertificate" storeLocation="LocalMachine" storeName="My" />
