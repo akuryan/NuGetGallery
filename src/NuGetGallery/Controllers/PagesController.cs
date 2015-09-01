@@ -1,11 +1,16 @@
-﻿using System;
+﻿// Copyright (c) .NET Foundation. All rights reserved.
+// Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
+
+using System;
 using System.Linq;
+using System.Net;
 using System.Threading.Tasks;
 using System.Web.Mvc;
 
 namespace NuGetGallery
 {
-    public partial class PagesController : AppController
+    public partial class PagesController
+        : AppController
     {
         public IContentService ContentService { get; protected set; }
 
@@ -27,6 +32,11 @@ namespace NuGetGallery
             return View(pageName);
         }
 
+        public virtual ActionResult About()
+        {
+            return View();
+        }
+
         public virtual ActionResult Contact()
         {
             return View();
@@ -41,6 +51,11 @@ namespace NuGetGallery
                     TimeSpan.FromMinutes(1));
             }
             return View();
+        }
+
+        public virtual ActionResult EmptyHome()
+        {
+            return new HttpStatusCodeResult(HttpStatusCode.OK, "Empty Home");
         }
 
         public virtual async Task<ActionResult> Terms()

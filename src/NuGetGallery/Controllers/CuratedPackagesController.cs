@@ -1,11 +1,15 @@
-﻿using System.Linq;
+﻿// Copyright (c) .NET Foundation. All rights reserved.
+// Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
+
+using System.Linq;
 using System.Web.Mvc;
 using System.Data.Entity;
 
 namespace NuGetGallery
 {
     [Authorize]
-    public partial class CuratedPackagesController : AppController
+    public partial class CuratedPackagesController
+        : AppController
     {
         internal ICuratedFeedService CuratedFeedService { get; set; }
         internal IEntitiesContext EntitiesContext { get; set; }

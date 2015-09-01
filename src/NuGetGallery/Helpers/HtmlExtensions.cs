@@ -1,4 +1,6 @@
-﻿using System;
+﻿// Copyright (c) .NET Foundation. All rights reserved.
+// Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -39,14 +41,20 @@ namespace NuGetGallery.Helpers
         public static IHtmlString ValidationSummaryFor(this HtmlHelper html, string key)
         {
             var toRemove = html.ViewData.ModelState.Keys
-                .Where(k => !String.Equals(k, key, StringComparison.OrdinalIgnoreCase))
+                .Where(k => !string.Equals(k, key, StringComparison.OrdinalIgnoreCase))
                 .ToList();
 
-            ModelStateDictionary copy = new ModelStateDictionary(html.ViewData.ModelState);
+            var copy = new Dictionary<string, ModelState>();
+            foreach (var keyValuePair in html.ViewData.ModelState)
+            {
+                copy.Add(keyValuePair.Key, keyValuePair.Value);
+            }
+
             foreach (var k in toRemove)
             {
                 html.ViewData.ModelState.Remove(k);
             }
+
             var str = html.ValidationSummary();
 
             // Restore the old model state

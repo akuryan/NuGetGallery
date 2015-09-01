@@ -1,4 +1,9 @@
-﻿using NuGet;
+﻿// Copyright (c) .NET Foundation. All rights reserved.
+// Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
+
+using System.Collections.Generic;
+using System.Linq;
+using NuGet;
 using NuGetGallery.Packaging;
 
 namespace NuGetGallery
@@ -13,14 +18,17 @@ namespace NuGetGallery
 
     public class AutomaticallyCuratePackageCommand : AppCommand, IAutomaticallyCuratePackageCommand
     {
-        public AutomaticallyCuratePackageCommand(IEntitiesContext entities)
+        private readonly List<IAutomaticPackageCurator> _curators;
+
+        public AutomaticallyCuratePackageCommand(IEnumerable<IAutomaticPackageCurator> curators, IEntitiesContext entities)
             : base(entities)
         {
+            _curators = curators.ToList();
         }
 
         public void Execute(Package galleryPackage, INupkg nugetPackage, bool commitChanges)
         {
-            foreach (var curator in GetServices<IAutomaticPackageCurator>())
+            foreach (var curator in _curators)
             {
                 curator.Curate(galleryPackage, nugetPackage, commitChanges: commitChanges);
             }

@@ -1,4 +1,6 @@
-﻿using System.Threading.Tasks;
+﻿// Copyright (c) .NET Foundation. All rights reserved.
+// Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
+using System.Threading.Tasks;
 using Microsoft.WindowsAzure.Storage.Blob;
 
 namespace NuGetGallery
@@ -29,6 +31,11 @@ namespace NuGetGallery
         public ISimpleCloudBlob GetBlobReference(string blobAddressUri)
         {
             return new CloudBlobWrapper(_blobContainer.GetBlockBlobReference(blobAddressUri));
+        }
+
+        public Task<bool> ExistsAsync()
+        {
+            return _blobContainer.ExistsAsync();
         }
     }
 }

@@ -1,13 +1,10 @@
-﻿using System;
-using System.Collections.Generic;
+﻿// Copyright (c) .NET Foundation. All rights reserved.
+// Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
+
+using System;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
-using System.Configuration;
-using System.Diagnostics;
-using System.Globalization;
 using System.Net.Mail;
-using System.Web;
-using Microsoft.WindowsAzure.ServiceRuntime;
 
 namespace NuGetGallery.Configuration
 {
@@ -36,9 +33,24 @@ namespace NuGetGallery.Configuration
         public string AzureStorageConnectionString { get; set; }
 
         /// <summary>
+        /// Gets a setting if Read Access Geo Redundant is enabled in azure storage
+        /// </summary>
+        public bool AzureStorageReadAccessGeoRedundant { get; set; }
+
+        /// <summary>
         /// Gets the URI to the search service
         /// </summary>
-        public Uri SearchServiceUri { get; set; }
+        public Uri ServiceDiscoveryUri { get; set; }
+
+        /// <summary>
+        /// Gets the @type for the Search endpoint
+        /// </summary>
+        public string SearchServiceResourceType { get; set; }
+
+        /// <summary>
+        /// Gets the URI to the metrics service
+        /// </summary>
+        public Uri MetricsServiceUri { get; set; }
 
         /// <summary>
         /// Gets a boolean indicating if the site requires that email addresses be confirmed
@@ -50,6 +62,11 @@ namespace NuGetGallery.Configuration
         /// Gets a boolean indicating if the site is in read only mode
         /// </summary>
         public bool ReadOnlyMode { get; set; }
+
+        /// <summary>
+        /// Gets if only service feeds should be registered
+        /// </summary>
+        public bool FeedOnlyMode { get; set; }
 
         /// <summary>
         /// Gets the local directory in which to store files.
@@ -105,6 +122,11 @@ namespace NuGetGallery.Configuration
         public string FacebookAppId { get; set; }
 
         /// <summary>
+        /// Gets the Application Insights instrumentation key associated with this deployment.
+        /// </summary>
+        public string AppInsightsInstrumentationKey { get; set; }
+
+        /// <summary>
         /// Gets the protocol-independent site root
         /// </summary>
         public string SiteRoot { get; set; }
@@ -118,7 +140,7 @@ namespace NuGetGallery.Configuration
         /// Gets a boolean indicating if perf logs should be collected
         /// </summary>
         public bool CollectPerfLogs { get; set; }
-        
+
         /// <summary>
         /// Gets a boolean indicating if the search index should be updated automatically in the background
         /// </summary>

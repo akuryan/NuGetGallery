@@ -23,6 +23,19 @@ if(!(Test-Path $appcmd)) {
 &$appcmd set config -section:system.applicationHost/sites /siteDefaults.logFile.period:"Hourly" /commit:apphost
 &$appcmd set config -section:system.applicationHost/sites /siteDefaults.logFile.logExtFileFlags:"Date,Time,TimeTaken,BytesRecv,BytesSent,ComputerName,HttpStatus,HttpSubStatus,Win32Status,ProtocolVersion,ServerIP,ServerPort,Method,Host,UriStem,UriQuery,UserAgent"
 
+
+# Increase the number of available IIS threads for high performance applications
+# Uses the recommended values from http://msdn.microsoft.com/en-us/library/ms998549.aspx#scalenetchapt06_topic8
+# Assumes running on two cores (medium instance on Azure)
+&$appcmd set config /commit:MACHINE -section:processModel -maxWorkerThreads:100
+&$appcmd set config /commit:MACHINE -section:processModel -minWorkerThreads:50
+&$appcmd set config /commit:MACHINE -section:processModel -minIoThreads:50
+&$appcmd set config /commit:MACHINE -section:processModel -maxIoThreads:100
+ 
+# Adjust the maximum number of connections per core for all IP addresses
+&$appcmd set config /commit:MACHINE -section:connectionManagement /+["address='*',maxconnection='240'"]
+
+
 # Configure IP Restrictions
 
 #  Install the feature
@@ -51,4 +64,23 @@ $ips | where { ![String]::IsNullOrEmpty($_) } | foreach {
     else {
         &$appcmd set config -section:system.webServer/security/ipSecurity /+"[ipAddress='$ip',allowed='False']" /commit:apphost
     }
+}
+
+# Configure secondary SSL bindings
+$setting = [Microsoft.WindowsAzure.ServiceRuntime.RoleEnvironment]::GetConfigurationSettingValue("Startup.AdditionalSSL");
+$additionalSSL = $setting.Split(","); # e.g. foo.bar:443:thumbprint,bar.baz:443:FEDCBA
+
+# Register additional SSL bindings
+$sites = [xml](&$appcmd list sites /xml)
+$defaultSite = $sites.appcmd.SITE[0].Attributes[0].Value.ToString()
+$additionalSSL | where { ![String]::IsNullOrEmpty($_) } | foreach {
+    $parts = $_.Split(":")`
+
+	$hostname = $parts[0]
+	$port = $parts[1]
+	$thumbprint = $parts[2]
+	
+	echo Adding binding to site $defaultSite for URL https://$hostname`:$port with SNI certificate $thumbprint
+	&$appcmd set site /site.name:"$defaultSite" /+"bindings.[protocol='https',bindingInformation='*:$port`:$hostname',sslFlags='1']" /commit:apphost
+	netsh http add sslcert hostnameport=$hostname`:$port certhash=$thumbprint appid='{4dc3e181-e14b-4a21-b022-59fc669b0914}' certstorename=MY
 }

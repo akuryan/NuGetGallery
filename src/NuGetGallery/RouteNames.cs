@@ -1,4 +1,6 @@
-﻿namespace NuGetGallery
+﻿// Copyright (c) .NET Foundation. All rights reserved.
+// Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
+namespace NuGetGallery
 {
     public static class RouteName
     {
@@ -60,5 +62,8 @@
         public const string UnsubscribeFromEmails = "UnsubscribeFromEmails";
         public const string Error500 = "Error500";
         public const string Error404 = "Error404";
+        public const string Status = "Status";
+        public const string Contributors = "Contributors";
+        public const string Team = "Team";
     }
 }

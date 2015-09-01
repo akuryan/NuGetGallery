@@ -1,4 +1,6 @@
-﻿using System;
+﻿// Copyright (c) .NET Foundation. All rights reserved.
+// Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
+using System;
 using System.Globalization;
 using System.Net.Mail;
 using System.Text;
@@ -13,6 +15,7 @@ namespace NuGetGallery
         public User RequestingUser { get; set; }
         public Package Package { get; set; }
         public string Reason { get; set; }
+        public string Signature { get; set; }
         public string Message { get; set; }
         public bool AlreadyContactedOwners { get; set; }
         public UrlHelper Url { get; set; }
@@ -22,7 +25,7 @@ namespace NuGetGallery
         {
             // note, format blocks {xxx} are matched by ordinal-case-sensitive comparison
             var builder = new StringBuilder(subject);
-            
+
             Substitute(builder, "{GalleryOwnerName}", config.GalleryOwner.DisplayName);
             Substitute(builder, "{Id}", Package.PackageRegistration.Id);
             Substitute(builder, "{Version}", Package.Version);
@@ -30,8 +33,8 @@ namespace NuGetGallery
             if (RequestingUser != null)
             {
                 Substitute(builder, "{User}", String.Format(
-                    CultureInfo.CurrentCulture, 
-                    "{2}**User:** {0} ({1}){2}{3}", 
+                    CultureInfo.CurrentCulture,
+                    "{2}**User:** {0} ({1}){2}{3}",
                     RequestingUser.Username,
                     RequestingUser.EmailAddress,
                     Environment.NewLine,
@@ -47,6 +50,7 @@ namespace NuGetGallery
             Substitute(builder, "{PackageUrl}", Url.Package(Package.PackageRegistration.Id, null, scheme: "http"));
             Substitute(builder, "{VersionUrl}", Url.Package(Package.PackageRegistration.Id, Package.Version, scheme: "http"));
             Substitute(builder, "{Reason}", Reason);
+            Substitute(builder, "{Signature}", Signature);
             Substitute(builder, "{Message}", Message);
 
             builder.Replace(@"\{\", "{");
@@ -60,6 +64,10 @@ namespace NuGetGallery
 
         private static string Escape(string s)
         {
+            if (string.IsNullOrEmpty(s))
+            {
+                return string.Empty;
+            }
             return s.Replace("{", @"\{\");
         }
     }

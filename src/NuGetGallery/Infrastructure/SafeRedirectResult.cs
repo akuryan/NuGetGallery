@@ -1,7 +1,7 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
+﻿// Copyright (c) .NET Foundation. All rights reserved.
+// Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
+
+using System;
 using System.Web.Mvc;
 using System.Web.WebPages;
 
@@ -20,7 +20,7 @@ namespace NuGetGallery
 
         public override void ExecuteResult(ControllerContext context)
         {
-            if (String.IsNullOrWhiteSpace(Url) ||
+            if (string.IsNullOrWhiteSpace(Url) ||
                 !context.RequestContext.HttpContext.Request.IsUrlLocalToHost(Url) ||
                 Url.Length <= 1 ||
                 IsValidLocalUrl(Url))

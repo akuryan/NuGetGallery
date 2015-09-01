@@ -1,4 +1,6 @@
-﻿using System;
+﻿// Copyright (c) .NET Foundation. All rights reserved.
+// Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
+using System;
 using System.IO;
 using System.Linq;
 using System.Runtime.Versioning;
@@ -9,12 +11,17 @@ namespace NuGetGallery
 {
     public class WebMatrixPackageCurator : AutomaticPackageCurator
     {
+        public WebMatrixPackageCurator(ICuratedFeedService curatedFeedService)
+            : base(curatedFeedService)
+        {
+        }
+
         public override void Curate(
             Package galleryPackage,
             INupkg nugetPackage,
             bool commitChanges)
         {
-            var curatedFeed = GetService<ICuratedFeedService>().GetFeedByName("webmatrix", includePackages: true);
+            var curatedFeed = CuratedFeedService.GetFeedByName("webmatrix", includePackages: true);
             if (curatedFeed == null)
             {
                 return;
@@ -23,7 +30,7 @@ namespace NuGetGallery
             var shouldBeIncluded = ShouldCuratePackage(curatedFeed, galleryPackage, nugetPackage);
             if (shouldBeIncluded)
             {
-                GetService<ICuratedFeedService>().CreatedCuratedPackage(
+                CuratedFeedService.CreatedCuratedPackage(
                     curatedFeed,
                     galleryPackage.PackageRegistration,
                     included: true,

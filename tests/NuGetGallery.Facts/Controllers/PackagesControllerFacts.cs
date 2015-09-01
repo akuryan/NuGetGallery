@@ -1,8 +1,11 @@
-﻿using System;
+﻿// Copyright (c) .NET Foundation. All rights reserved.
+// Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
+
+using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net.Mail;
-using System.Security.Principal;
 using System.Threading.Tasks;
 using System.Web;
 using System.Web.Mvc;
@@ -11,12 +14,11 @@ using Moq;
 using NuGet;
 using NuGetGallery.AsyncFileUpload;
 using NuGetGallery.Configuration;
-using NuGetGallery.Packaging;
+using NuGetGallery.Framework;
 using NuGetGallery.Helpers;
+using NuGetGallery.Packaging;
 using Xunit;
 using Xunit.Extensions;
-using System.Collections.Generic;
-using NuGetGallery.Framework;
 
 namespace NuGetGallery
 {
@@ -32,7 +34,6 @@ namespace NuGetGallery
             Mock<ISearchService> searchService = null,
             Exception readPackageException = null,
             Mock<IAutomaticallyCuratePackageCommand> autoCuratePackageCmd = null,
-            Mock<INuGetExeDownloaderService> downloaderService = null,
             Mock<IAppConfiguration> config = null,
             Mock<IPackageFileService> packageFileService = null,
             Mock<IEntitiesContext> entitiesContext = null,
@@ -50,7 +51,6 @@ namespace NuGetGallery
             messageService = messageService ?? new Mock<IMessageService>();
             searchService = searchService ?? CreateSearchService();
             autoCuratePackageCmd = autoCuratePackageCmd ?? new Mock<IAutomaticallyCuratePackageCommand>();
-            downloaderService = downloaderService ?? new Mock<INuGetExeDownloaderService>(MockBehavior.Strict);
             config = config ?? new Mock<IAppConfiguration>();
 
             if (packageFileService == null)
@@ -73,7 +73,6 @@ namespace NuGetGallery
                 messageService.Object,
                 searchService.Object,
                 autoCuratePackageCmd.Object,
-                downloaderService.Object,
                 packageFileService.Object,
                 entitiesContext.Object,
                 config.Object,
@@ -85,7 +84,7 @@ namespace NuGetGallery
 
             httpContext = httpContext ?? new Mock<HttpContextBase>();
             TestUtility.SetupHttpContextMockForUrlGeneration(httpContext, controller.Object);
-            
+
             if (readPackageException != null)
             {
                 controller.Setup(x => x.CreatePackage(It.IsAny<Stream>())).Throws(readPackageException);
@@ -148,13 +147,13 @@ namespace NuGetGallery
         public class TheDisplayPackageMethod
         {
             [Fact]
-            public void GivenANonNormalizedVersionIt302sToTheNormalizedVersion()
+            public async Task GivenANonNormalizedVersionIt302sToTheNormalizedVersion()
             {
                 // Arrange
                 var controller = CreateController();
 
                 // Act
-                var result = controller.DisplayPackage("Foo", "01.01.01");
+                var result = await controller.DisplayPackage("Foo", "01.01.01");
 
                 // Assert
                 ResultAssert.IsRedirectToRoute(result, new
@@ -166,7 +165,7 @@ namespace NuGetGallery
             }
 
             [Fact]
-            public void GivenANonExistantPackageIt404s()
+            public async Task GivenANonExistantPackageIt404s()
             {
                 // Arrange
                 var packageService = new Mock<IPackageService>();
@@ -176,19 +175,20 @@ namespace NuGetGallery
                               .ReturnsNull();
 
                 // Act
-                var result = controller.DisplayPackage("Foo", "1.1.1");
+                var result = await controller.DisplayPackage("Foo", "1.1.1");
 
                 // Assert
                 ResultAssert.IsNotFound(result);
             }
 
             [Fact]
-            public void GivenAValidPackageThatTheCurrentUserDoesNotOwnItDisplaysCurrentMetadata()
+            public async Task GivenAValidPackageThatTheCurrentUserDoesNotOwnItDisplaysCurrentMetadata()
             {
                 // Arrange
                 var packageService = new Mock<IPackageService>();
+                var indexingService = new Mock<IIndexingService>();
                 var controller = CreateController(
-                    packageService: packageService);
+                    packageService: packageService, indexingService: indexingService);
                 controller.SetCurrentUser(TestUtility.FakeUser);
 
                 packageService.Setup(p => p.FindPackageByIdAndVersion("Foo", "1.1.1", true))
@@ -204,8 +204,10 @@ namespace NuGetGallery
                                   Title = "A test package!"
                               });
 
+                indexingService.Setup(i => i.GetLastWriteTime()).Returns(Task.FromResult((DateTime?)DateTime.UtcNow));
+
                 // Act
-                var result = controller.DisplayPackage("Foo", "1.1.1");
+                var result = await controller.DisplayPackage("Foo", "1.1.1");
 
                 // Assert
                 var model = ResultAssert.IsView<DisplayPackageViewModel>(result);
@@ -215,7 +217,7 @@ namespace NuGetGallery
             }
 
             [Fact]
-            public void GivenAValidPackageThatTheCurrentUserOwnsItDisablesResponseCaching()
+            public async Task GivenAValidPackageThatTheCurrentUserOwnsItDisablesResponseCaching()
             {
                 // Arrange
                 var packageService = new Mock<IPackageService>();
@@ -249,25 +251,27 @@ namespace NuGetGallery
                 packageService
                     .Setup(p => p.FindPackageByIdAndVersion("Foo", "1.1.1", true))
                     .Returns(package);
-                
+
                 // Act
-                controller.DisplayPackage("Foo", "1.1.1");
+                await controller.DisplayPackage("Foo", "1.1.1");
 
                 // Assert
                 httpCachePolicy.VerifyAll();
             }
 
             [Fact]
-            public void GivenAValidPackageThatTheCurrentUserOwnsWithNoEditsItDisplaysCurrentMetadata()
+            public async Task GivenAValidPackageThatTheCurrentUserOwnsWithNoEditsItDisplaysCurrentMetadata()
             {
                 // Arrange
                 var packageService = new Mock<IPackageService>();
+                var indexingService = new Mock<IIndexingService>();
                 var editPackageService = new Mock<EditPackageService>();
                 var httpContext = new Mock<HttpContextBase>();
                 var httpCachePolicy = new Mock<HttpCachePolicyBase>();
                 var controller = CreateController(
                     packageService: packageService,
                     editPackageService: editPackageService,
+                    indexingService: indexingService,
                     httpContext: httpContext);
                 controller.SetCurrentUser(TestUtility.FakeUser);
                 httpContext.Setup(c => c.Response.Cache).Returns(httpCachePolicy.Object);
@@ -291,8 +295,10 @@ namespace NuGetGallery
                     .Setup(e => e.GetPendingMetadata(package))
                     .ReturnsNull();
 
+                indexingService.Setup(i => i.GetLastWriteTime()).Returns(Task.FromResult((DateTime?)DateTime.UtcNow));
+
                 // Act
-                var result = controller.DisplayPackage("Foo", "1.1.1");
+                var result = await controller.DisplayPackage("Foo", "1.1.1");
 
                 // Assert
                 var model = ResultAssert.IsView<DisplayPackageViewModel>(result);
@@ -302,16 +308,18 @@ namespace NuGetGallery
             }
 
             [Fact]
-            public void GivenAValidPackageThatTheCurrentUserOwnsWithEditsItDisplaysEditedMetadata()
+            public async Task GivenAValidPackageThatTheCurrentUserOwnsWithEditsItDisplaysEditedMetadata()
             {
                 // Arrange
                 var packageService = new Mock<IPackageService>();
+                var indexingService = new Mock<IIndexingService>();
                 var editPackageService = new Mock<EditPackageService>();
                 var httpContext = new Mock<HttpContextBase>();
                 var httpCachePolicy = new Mock<HttpCachePolicyBase>();
                 var controller = CreateController(
                     packageService: packageService,
                     editPackageService: editPackageService,
+                    indexingService: indexingService,
                     httpContext: httpContext);
                 controller.SetCurrentUser(TestUtility.FakeUser);
                 httpContext.Setup(c => c.Response.Cache).Returns(httpCachePolicy.Object);
@@ -337,8 +345,10 @@ namespace NuGetGallery
                         Title = "A modified package!"
                     });
 
+                indexingService.Setup(i => i.GetLastWriteTime()).Returns(Task.FromResult((DateTime?)DateTime.UtcNow));
+
                 // Act
-                var result = controller.DisplayPackage("Foo", "1.1.1");
+                var result = await controller.DisplayPackage("Foo", "1.1.1");
 
                 // Assert
                 var model = ResultAssert.IsView<DisplayPackageViewModel>(result);
@@ -357,7 +367,7 @@ namespace NuGetGallery
                 packageService.Setup(p => p.FindPackageRegistrationById("foo")).Returns(new PackageRegistration());
                 var controller = CreateController(packageService: packageService);
                 controller.SetCurrentUser(new User { Username = "username" });
-                
+
                 var result = controller.ConfirmOwner("foo", "username", "");
 
                 Assert.IsType<HttpNotFoundResult>(result);
@@ -369,10 +379,10 @@ namespace NuGetGallery
                 // Arrange
                 var controller = CreateController();
                 controller.SetCurrentUser(new User { Username = "username" });
-                
+
                 // Act
                 var result = controller.ConfirmOwner("foo", "username", "token");
-                
+
                 // Assert
                 Assert.IsType<HttpNotFoundResult>(result);
             }
@@ -383,7 +393,7 @@ namespace NuGetGallery
                 var controller = CreateController();
                 controller.SetCurrentUser("userA");
                 var result = controller.ConfirmOwner("foo", "userB", "token");
-                
+
                 var model = ResultAssert.IsView<PackageOwnerConfirmationModel>(result);
                 Assert.Equal(ConfirmOwnershipResult.NotYourRequest, model.Result);
                 Assert.Equal("userB", model.Username);
@@ -402,7 +412,7 @@ namespace NuGetGallery
                 packageService.Setup(p => p.ConfirmPackageOwner(package, user, "token")).Returns(confirmationResult);
                 var controller = CreateController(packageService: packageService);
                 controller.SetCurrentUser(user);
-                
+
                 var result = controller.ConfirmOwner("foo", "username", "token");
 
                 var model = ResultAssert.IsView<PackageOwnerConfirmationModel>(result);
@@ -766,7 +776,7 @@ namespace NuGetGallery
                 };
                 var packageService = new Mock<IPackageService>();
                 packageService.Setup(p => p.FindPackageByIdAndVersion("mordor", "2.0.1", true)).Returns(package);
-                
+
                 ReportPackageRequest reportRequest = null;
                 var messageService = new Mock<IMessageService>();
                 messageService
@@ -1525,126 +1535,6 @@ namespace NuGetGallery
                 await controller.VerifyPackage(new VerifyPackageRequest() { Listed = false, Edit = null });
 
                 fakeAutoCuratePackageCmd.Verify(fake => fake.Execute(fakePackage, fakeNuGetPackage.Object, false));
-            }
-
-            [Fact]
-            public async Task WillExtractNuGetExe()
-            {
-                // Arrange
-                var fakeUploadFileService = new Mock<IUploadFileService>();
-                fakeUploadFileService.Setup(x => x.DeleteUploadFileAsync(TestUtility.FakeUser.Key)).Returns(Task.FromResult(0));
-                fakeUploadFileService.Setup(x => x.GetUploadFileAsync(TestUtility.FakeUser.Key)).Returns(Task.FromResult<Stream>(Stream.Null));
-                var fakePackageService = new Mock<IPackageService>();
-                var commandLinePackage = new Package
-                    {
-                        PackageRegistration = new PackageRegistration { Id = "NuGet.CommandLine" },
-                        Version = "2.0.0",
-                        IsLatestStable = true
-                    };
-                fakePackageService.Setup(x => x.CreatePackage(It.IsAny<INupkg>(), It.IsAny<User>(), It.IsAny<bool>())).Returns(commandLinePackage);
-                var nugetExeDownloader = new Mock<INuGetExeDownloaderService>(MockBehavior.Strict);
-                nugetExeDownloader.Setup(d => d.UpdateExecutableAsync(It.IsAny<INupkg>())).Returns(Task.FromResult(0)).Verifiable();
-                var controller = CreateController(
-                    packageService: fakePackageService,
-                    uploadFileService: fakeUploadFileService,
-                    downloaderService: nugetExeDownloader);
-                controller.SetCurrentUser(TestUtility.FakeUser);
-
-                // Act
-                await controller.VerifyPackage(new VerifyPackageRequest() { Listed = false, Edit = null });
-
-                // Assert
-                nugetExeDownloader.Verify();
-            }
-
-            [Fact]
-            public async Task WillNotExtractNuGetExeIfIsNotLatestStable()
-            {
-                // Arrange
-                var fakeUploadFileService = new Mock<IUploadFileService>();
-
-                var fakePackageService = new Mock<IPackageService>();
-                var commandLinePackage = new Package
-                    {
-                        PackageRegistration = new PackageRegistration { Id = "NuGet.CommandLine" },
-                        Version = "2.0.0",
-                        IsLatestStable = false
-                    };
-
-                fakePackageService.Setup(x => x.CreatePackage(It.IsAny<INupkg>(), It.IsAny<User>(), It.IsAny<bool>())).Returns(commandLinePackage);
-
-                fakeUploadFileService.Setup(x => x.GetUploadFileAsync(TestUtility.FakeUser.Key)).Returns(Task.FromResult<Stream>(
-                    CreateTestPackageStream(commandLinePackage)));
-                fakeUploadFileService.Setup(x => x.DeleteUploadFileAsync(TestUtility.FakeUser.Key)).Returns(Task.FromResult(0));
-
-                var nugetExeDownloader = new Mock<INuGetExeDownloaderService>(MockBehavior.Strict);
-                var controller = CreateController(
-                    packageService: fakePackageService,
-                    uploadFileService: fakeUploadFileService,
-                    downloaderService: nugetExeDownloader);
-                controller.SetCurrentUser(TestUtility.FakeUser);
-
-                // Act
-                await controller.VerifyPackage(new VerifyPackageRequest() { Listed = false, Edit = null });
-
-                // Assert
-                nugetExeDownloader.Verify(d => d.UpdateExecutableAsync(It.IsAny<INupkg>()), Times.Never());
-            }
-
-            [Theory]
-            [InlineData("nuget-commandline")]
-            [InlineData("nuget.x.commandline")]
-            [InlineData("nuget.command")]
-            public async Task WillNotExtractNuGetExeIfIsItDoesNotMatchId(string id)
-            {
-                // Arrange
-                var fakeUploadFileService = new Mock<IUploadFileService>();
-
-                var fakePackageService = new Mock<IPackageService>();
-                var commandLinePackage = new Package { PackageRegistration = new PackageRegistration { Id = id }, Version = "2.0.0", IsLatestStable = true };
-
-                fakeUploadFileService.Setup(x => x.GetUploadFileAsync(TestUtility.FakeUser.Key)).Returns(Task.FromResult<Stream>(
-                    CreateTestPackageStream(commandLinePackage)));
-                fakeUploadFileService.Setup(x => x.DeleteUploadFileAsync(TestUtility.FakeUser.Key)).Returns(Task.FromResult(0));
-
-                fakePackageService.Setup(x => x.CreatePackage(It.IsAny<INupkg>(), It.IsAny<User>(), It.IsAny<bool>())).Returns(commandLinePackage);
-                var nugetExeDownloader = new Mock<INuGetExeDownloaderService>(MockBehavior.Strict);
-                var controller = CreateController(
-                    packageService: fakePackageService,
-                    uploadFileService: fakeUploadFileService,
-                    downloaderService: nugetExeDownloader);
-                TestUtility.SetupUrlHelperForUrlGeneration(controller, new Uri("http://1.1.1.1"));
-                controller.SetCurrentUser(TestUtility.FakeUser);
-
-                // Act
-                await controller.VerifyPackage(new VerifyPackageRequest() { Listed = false, Edit = null });
-
-                // Assert
-                nugetExeDownloader.Verify(d => d.UpdateExecutableAsync(It.IsAny<INupkg>()), Times.Never());
-            }
-
-            private Stream CreateTestPackageStream(Package commandLinePackage)
-            {
-                var packageStream = new MemoryStream();
-                var builder = new PackageBuilder
-                {
-                    Id = commandLinePackage.PackageRegistration.Id,
-                    Version = SemanticVersion.Parse(commandLinePackage.Version),
-                    Authors = 
-                    {
-                        "dummyAuthor",
-                    },
-                    Description = commandLinePackage.Description ?? "dummyDesription",
-                };
-
-                // Make the package buildable by adding a dependency
-                if (builder.Files.Count == 0 && !builder.DependencySets.Any(s => s.Dependencies.Any()))
-                {
-                    builder.DependencySets.Add(new PackageDependencySet(null, new[] { new NuGet.PackageDependency("dummy") }));
-                }
-
-                builder.Save(packageStream);
-                return packageStream;
             }
         }
 

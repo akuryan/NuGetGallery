@@ -1,8 +1,9 @@
-﻿using System;
+﻿// Copyright (c) .NET Foundation. All rights reserved.
+// Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
+
+using System;
 using System.Linq;
-using System.Net;
 using System.Net.Mail;
-using System.Security.Principal;
 using System.Threading.Tasks;
 using System.Web.Mvc;
 using NuGetGallery.Authentication;
@@ -10,7 +11,8 @@ using NuGetGallery.Configuration;
 
 namespace NuGetGallery
 {
-    public partial class UsersController : AppController
+    public partial class UsersController
+        : AppController
     {
         public ICuratedFeedService CuratedFeedService { get; protected set; }
         public IUserService UserService { get; protected set; }
@@ -90,6 +92,7 @@ namespace NuGetGallery
             return RedirectToAction("Account");
         }
 
+        [Authorize]
         public virtual ActionResult Thanks()
         {
             // No need to redirect here after someone logs in...
@@ -121,7 +124,7 @@ namespace NuGetGallery
             // We don't want Login to have us as a return URL
             // By having this value present in the dictionary BUT null, we don't put "returnUrl" on the Login link at all
             ViewData[Constants.ReturnUrlViewDataKey] = null;
-            
+
             return View();
         }
 
@@ -132,7 +135,7 @@ namespace NuGetGallery
             // We don't want Login to have us as a return URL
             // By having this value present in the dictionary BUT null, we don't put "returnUrl" on the Login link at all
             ViewData[Constants.ReturnUrlViewDataKey] = null;
-            
+
             if (ModelState.IsValid)
             {
                 var user = await AuthService.GeneratePasswordResetToken(model.Email, Constants.DefaultPasswordResetTokenExpirationHours * 60);
@@ -152,7 +155,7 @@ namespace NuGetGallery
             // We don't want Login to have us as a return URL
             // By having this value present in the dictionary BUT null, we don't put "returnUrl" on the Login link at all
             ViewData[Constants.ReturnUrlViewDataKey] = null;
-            
+
             ViewBag.Email = TempData["Email"];
             ViewBag.Expiration = Constants.DefaultPasswordResetTokenExpirationHours;
             return View();
@@ -163,7 +166,7 @@ namespace NuGetGallery
             // We don't want Login to have us as a return URL
             // By having this value present in the dictionary BUT null, we don't put "returnUrl" on the Login link at all
             ViewData[Constants.ReturnUrlViewDataKey] = null;
-            
+
             ViewBag.ResetTokenValid = true;
             ViewBag.ForgotPassword = forgot;
             return View();
@@ -176,7 +179,7 @@ namespace NuGetGallery
             // We don't want Login to have us as a return URL
             // By having this value present in the dictionary BUT null, we don't put "returnUrl" on the Login link at all
             ViewData[Constants.ReturnUrlViewDataKey] = null;
-            
+
             var cred = await AuthService.ResetPasswordWithToken(username, token, model.NewPassword);
             ViewBag.ResetTokenValid = cred != null;
             ViewBag.ForgotPassword = forgot;
@@ -215,7 +218,7 @@ namespace NuGetGallery
             }
 
             var user = GetCurrentUser();
-            
+
             string existingEmail = user.EmailAddress;
             var model = new ConfirmationViewModel
             {
@@ -253,7 +256,7 @@ namespace NuGetGallery
             return View(model);
         }
 
-        public virtual ActionResult Profiles(string username)
+        public virtual ActionResult Profiles(string username, int page = 1, bool showAllPackages = false)
         {
             var user = UserService.FindByUsername(username);
             if (user == null)
@@ -265,15 +268,11 @@ namespace NuGetGallery
                 .OrderByDescending(p => p.PackageRegistration.DownloadCount)
                 .Select(p => new PackageViewModel(p)
                 {
-                    DownloadCount = p.PackageRegistration.DownloadCount,
-                    Version = null
+                    DownloadCount = p.PackageRegistration.DownloadCount
                 }).ToList();
 
-            var model = new UserProfileModel(user)
-            {
-                Packages = packages,
-                TotalPackageDownloadCount = packages.Sum(p => p.TotalDownloadCount),
-            };
+            var model = new UserProfileModel(user, packages, page - 1, Constants.DefaultPackageListPageSize, Url);
+            model.ShowAllPackages = showAllPackages;
 
             return View(model);
         }
@@ -316,7 +315,7 @@ namespace NuGetGallery
             }
             catch (EntityException e)
             {
-                ModelState.AddModelError("NewEmail", e.Message);
+                ModelState.AddModelError("ChangeEmail.NewEmail", e.Message);
                 return AccountView(model);
             }
 
@@ -335,6 +334,25 @@ namespace NuGetGallery
 
             return RedirectToAction(actionName: "Account", controllerName: "Users");
         }
+
+        [HttpPost]
+        [Authorize]
+        public virtual async Task<ActionResult> CancelChangeEmail(AccountViewModel model)
+        {
+            var user = GetCurrentUser();
+
+            if(string.IsNullOrWhiteSpace(user.UnconfirmedEmailAddress))
+            {
+                return RedirectToAction(actionName: "Account", controllerName: "Users");
+            }
+
+            await UserService.CancelChangeEmailAddress(user);
+
+            TempData["Message"] = Strings.CancelEmailAddress;
+
+            return RedirectToAction(actionName: "Account", controllerName: "Users");
+        }
+
 
         [HttpPost]
         [Authorize]
@@ -391,7 +409,7 @@ namespace NuGetGallery
             var user = GetCurrentUser();
             var cred = user.Credentials.SingleOrDefault(
                 c => String.Equals(c.Type, credentialType, StringComparison.OrdinalIgnoreCase));
-            
+
             return RemoveCredential(user, cred, Strings.CredentialRemoved);
         }
 
@@ -427,18 +445,13 @@ namespace NuGetGallery
             else if (cred != null)
             {
                 await AuthService.RemoveCredential(user, cred);
-                
+
                 // Notify the user of the change
                 MessageService.SendCredentialRemovedNotice(user, cred);
-                
+
                 TempData["Message"] = message;
             }
             return RedirectToAction("Account");
-        }
-
-        private ActionResult EditProfileView()
-        {
-            return AccountView(new AccountViewModel());
         }
 
         private ActionResult AccountView(AccountViewModel model)
@@ -465,8 +478,8 @@ namespace NuGetGallery
             var resetPasswordUrl = Url.ConfirmationUrl(
                 "ResetPassword",
                 "Users",
-                user.Username, 
-                user.PasswordResetToken, 
+                user.Username,
+                user.PasswordResetToken,
                 new { forgot = forgotPassword });
             MessageService.SendPasswordResetInstructions(user, resetPasswordUrl, forgotPassword);
 

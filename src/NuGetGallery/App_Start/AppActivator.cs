@@ -1,6 +1,8 @@
-﻿using System;
+﻿// Copyright (c) .NET Foundation. All rights reserved.
+// Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
+
+using System;
 using System.Collections.Generic;
-using System.Data.Entity;
 using System.Diagnostics;
 using System.IO;
 using System.Security.Claims;
@@ -10,22 +12,19 @@ using System.Web.Optimization;
 using System.Web.Routing;
 using System.Web.UI;
 using Elmah;
-using Elmah.Contrib.Mvc;
 using Microsoft.Web.Infrastructure.DynamicModuleHelper;
 using Microsoft.WindowsAzure.Diagnostics;
 using Microsoft.WindowsAzure.ServiceRuntime;
-using Ninject;
-using Ninject.Web.Common;
 using NuGetGallery;
 using NuGetGallery.Configuration;
 using NuGetGallery.Diagnostics;
 using NuGetGallery.Infrastructure;
 using NuGetGallery.Infrastructure.Jobs;
 using NuGetGallery.Jobs;
-using WebActivator;
 using WebBackgrounder;
+using WebActivatorEx;
 
-[assembly: WebActivator.PreApplicationStartMethod(typeof(AppActivator), "PreStart")]
+[assembly: PreApplicationStartMethod(typeof(AppActivator), "PreStart")]
 [assembly: PostApplicationStartMethod(typeof(AppActivator), "PostStart")]
 [assembly: ApplicationShutdownMethod(typeof(AppActivator), "Stop")]
 
@@ -34,7 +33,6 @@ namespace NuGetGallery
     public static class AppActivator
     {
         private static JobManager _jobManager;
-        private static readonly Bootstrapper NinjectBootstrapper = new Bootstrapper();
 
         public static void PreStart()
         {
@@ -44,9 +42,7 @@ namespace NuGetGallery
 
             ViewEngines.Engines.Clear();
             ViewEngines.Engines.Add(CreateViewEngine());
-
-            NinjectPreStart();
-            ElmahPreStart();
+            
             GlimpsePreStart();
 
             try
@@ -56,7 +52,7 @@ namespace NuGetGallery
                     CloudPreStart();
                 }
             }
-            catch (Exception)
+            catch
             {
                 // Azure SDK not available!
             }
@@ -64,37 +60,42 @@ namespace NuGetGallery
 
         public static void PostStart()
         {
+            if (!OwinStartup.HasRun)
+            {
+                throw new AppActivatorException("The OwinStartup module did not run. Make sure the application runs in an OWIN pipeline and Microsoft.Owin.Host.SystemWeb.dll is in the bin directory.");
+            }
+
             // Get configuration from the kernel
-            var config = Container.Kernel.Get<IAppConfiguration>();
+            var config = DependencyResolver.Current.GetService<IAppConfiguration>();
+
             BackgroundJobsPostStart(config);
-            AppPostStart();
+            AppPostStart(config);
             BundlingPostStart();
         }
 
         public static void Stop()
         {
             BackgroundJobsStop();
-            NinjectStop();
         }
 
         private static RazorViewEngine CreateViewEngine()
         {
             var ret = new RazorViewEngine();
 
-            ret.AreaMasterLocationFormats = 
+            ret.AreaMasterLocationFormats =
                 ret.AreaViewLocationFormats =
                 ret.AreaPartialViewLocationFormats =
-                new string[]
+                new[]
             {
                 "~/Areas/{2}/Views/{1}/{0}.cshtml",
                 "~/Branding/Views/Shared/{0}.cshtml",
                 "~/Areas/{2}/Views/Shared/{0}.cshtml",
             };
 
-            ret.MasterLocationFormats = 
-                ret.ViewLocationFormats  =
+            ret.MasterLocationFormats =
+                ret.ViewLocationFormats =
                 ret.PartialViewLocationFormats =
-                new string[]
+                new[]
             {
                 "~/Branding/Views/{1}/{0}.cshtml",
                 "~/Views/{1}/{0}.cshtml",
@@ -163,18 +164,13 @@ namespace NuGetGallery
             BundleTable.Bundles.Add(fontAwesomeBundle);
         }
 
-        private static void ElmahPreStart()
+        private static void AppPostStart(IAppConfiguration configuration)
         {
-            ServiceCenter.Current = _ => Container.Kernel;
-        }
-
-        private static void AppPostStart()
-        {
-            Routes.RegisterRoutes(RouteTable.Routes);
+            Routes.RegisterRoutes(RouteTable.Routes, configuration.FeedOnlyMode);
             Routes.RegisterServiceRoutes(RouteTable.Routes);
             AreaRegistration.RegisterAllAreas();
 
-            GlobalFilters.Filters.Add(new ElmahHandleErrorAttribute() { View = "~/Views/Errors/InternalError.cshtml" });
+            GlobalFilters.Filters.Add(new SendErrorsToTelemetryAttribute { View = "~/Views/Errors/InternalError.cshtml" });
             GlobalFilters.Filters.Add(new ReadOnlyModeErrorFilter());
             GlobalFilters.Filters.Add(new AntiForgeryErrorFilter());
             ValueProviderFactories.Factories.Add(new HttpHeaderValueProviderFactory());
@@ -182,7 +178,7 @@ namespace NuGetGallery
 
         private static void BackgroundJobsPostStart(IAppConfiguration configuration)
         {
-            var indexer = Container.Kernel.TryGet<IIndexingService>();
+            var indexer = DependencyResolver.Current.GetService<IIndexingService>();
             var jobs = new List<IJob>();
             if (indexer != null)
             {
@@ -191,8 +187,8 @@ namespace NuGetGallery
             if (!configuration.HasWorker)
             {
                 jobs.Add(
-                    new UpdateStatisticsJob(TimeSpan.FromMinutes(5), 
-                        () => new EntitiesContext(configuration.SqlConnectionString, readOnly: false), 
+                    new UpdateStatisticsJob(TimeSpan.FromMinutes(5),
+                        () => new EntitiesContext(configuration.SqlConnectionString, readOnly: false),
                         timeout: TimeSpan.FromMinutes(5)));
             }
             if (configuration.CollectPerfLogs)
@@ -226,7 +222,7 @@ namespace NuGetGallery
                     }
                 }
             }
-            catch (Exception)
+            catch
             {
                 // Meh, so Azure isn't available...
             }
@@ -243,18 +239,6 @@ namespace NuGetGallery
             {
                 _jobManager.Dispose();
             }
-        }
-
-        private static void NinjectPreStart()
-        {
-            DynamicModuleUtility.RegisterModule(typeof(OnePerRequestHttpModule));
-            DynamicModuleUtility.RegisterModule(typeof(NinjectHttpModule));
-            NinjectBootstrapper.Initialize(() => Container.Kernel);
-        }
-
-        private static void NinjectStop()
-        {
-            NinjectBootstrapper.ShutDown();
         }
     }
 }

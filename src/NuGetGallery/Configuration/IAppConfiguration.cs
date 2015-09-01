@@ -1,6 +1,9 @@
-﻿using System;
-using System.ComponentModel;
+﻿// Copyright (c) .NET Foundation. All rights reserved.
+// Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
+
+using System;
 using System.Net.Mail;
+
 namespace NuGetGallery.Configuration
 {
     public interface IAppConfiguration
@@ -36,9 +39,24 @@ namespace NuGetGallery.Configuration
         string AzureStorageConnectionString { get; set; }
 
         /// <summary>
+        /// Gets a setting if Read Access Geo Redundant is enabled in azure storage
+        /// </summary>
+        bool AzureStorageReadAccessGeoRedundant { get; set; }
+
+        /// <summary>
         /// Gets the URI to the search service
         /// </summary>
-        Uri SearchServiceUri { get; set; }
+        Uri ServiceDiscoveryUri { get; set; }
+
+        /// <summary>
+        /// Gets the @type for the Search endpoint
+        /// </summary>
+        string SearchServiceResourceType { get; set; }
+
+        /// <summary>
+        /// Gets the URI to the metrics service
+        /// </summary>
+        Uri MetricsServiceUri { get; set; }
 
         /// <summary>
         /// Gets a boolean indicating if the site requires that email addresses be confirmed
@@ -49,6 +67,11 @@ namespace NuGetGallery.Configuration
         /// Gets a boolean indicating if the site is in read only mode
         /// </summary>
         bool ReadOnlyMode { get; set; }
+
+        /// <summary>
+        /// Gets if only service feeds should be registered
+        /// </summary>
+        bool FeedOnlyMode { get; set; }
 
         /// <summary>
         /// Gets the local directory in which to store files.
@@ -89,6 +112,11 @@ namespace NuGetGallery.Configuration
         /// Gets the App ID of the Facebook app associated with this deployment
         /// </summary>
         string FacebookAppId { get; set; }
+
+        /// <summary>
+        /// Gets the Application Insights instrumentation key associated with this deployment.
+        /// </summary>
+        string AppInsightsInstrumentationKey { get; set; }
 
         /// <summary>
         /// Gets the protocol-independent site root

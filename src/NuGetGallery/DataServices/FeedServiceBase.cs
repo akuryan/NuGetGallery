@@ -1,21 +1,24 @@
-﻿using System;
+﻿// Copyright (c) .NET Foundation. All rights reserved.
+// Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
+using System;
 using System.Data.Services;
 using System.Data.Services.Common;
 using System.Data.Services.Providers;
 using System.IO;
 using System.ServiceModel;
+using System.Text.RegularExpressions;
 using System.Web;
 using System.Web.Mvc;
 using NuGetGallery.Configuration;
-using NuGetGallery.DataServices;
 
 namespace NuGetGallery
 {
     [ServiceBehavior(ConcurrencyMode = ConcurrencyMode.Multiple)]
-    public abstract class FeedServiceBase<TContext, TPackage> : DataService<TContext>, IDataServiceStreamProvider, IServiceProvider, IDataServicePagingProvider
+    public abstract class FeedServiceBase<TContext, TPackage> : DataService<TContext>, IDataServiceStreamProvider, IServiceProvider
         where TContext : FeedContext<TPackage>
     {
-        private static readonly object CustomSkipTokenTag = new object();
+        static readonly Regex packagesByIdPathRegexV1 = new Regex(@"/api/v1/Packages\(.*\)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+        static readonly Regex packagesByIdPathRegexV2 = new Regex(@"/api/v2/Packages\(.*\)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
         private readonly ConfigurationService _configuration;
 
@@ -142,14 +145,11 @@ namespace NuGetGallery
             {
                 return this;
             }
-
-            // Override paging for search
-            if (serviceType == typeof(IDataServicePagingProvider) && 
-                HttpContext.Items.Contains(CustomSkipTokenTag))
+            if (serviceType == typeof(IDataServicePagingProvider))
             {
-                return this;
+                return SearchAdaptor.GetPagingProvider<TPackage>(SearchService, HttpContext.Request);
             }
-
+            
             return null;
         }
 
@@ -176,20 +176,31 @@ namespace NuGetGallery
             }
             return siteRoot;
         }
-
-        public object[] GetContinuationToken(System.Collections.IEnumerator enumerator)
+        
+        protected override void OnStartProcessingRequest(ProcessRequestArgs args)
         {
-            return new[] { HttpContext.Items[CustomSkipTokenTag] };
+            base.OnStartProcessingRequest(args);
+
+            if (ShouldCacheOutput(HttpContext))
+            {
+                var cache = HttpContext.Response.Cache;
+                cache.SetCacheability(HttpCacheability.ServerAndPrivate);
+                cache.SetExpires(DateTime.UtcNow.AddMinutes(5));
+
+                cache.VaryByHeaders["Accept"] = true;
+                cache.VaryByHeaders["Accept-Charset"] = true;
+                cache.VaryByHeaders["Accept-Encoding"] = true;
+                cache.VaryByParams["*"] = true;
+
+                cache.SetValidUntilExpires(true);
+            }
         }
 
-        public void SetContinuationToken(System.Linq.IQueryable query, ResourceType resourceType, object[] continuationToken)
+        private static bool ShouldCacheOutput(HttpContextBase context)
         {
-            // Custom paging is applied in SearchAdaptor instead.
-        }
-
-        internal void SetCustomSkipToken(int skipToken)
-        {
-            HttpContext.Items.Add(CustomSkipTokenTag, skipToken);
+            return context.Request.HttpMethod.Equals("GET", StringComparison.OrdinalIgnoreCase)
+                && string.IsNullOrEmpty(context.Request.Url.Query)
+                && (packagesByIdPathRegexV2.IsMatch(context.Request.Path) || packagesByIdPathRegexV1.IsMatch(context.Request.Path));
         }
     }
 }

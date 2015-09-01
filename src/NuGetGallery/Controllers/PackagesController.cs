@@ -1,4 +1,7 @@
-﻿using System;
+﻿// Copyright (c) .NET Foundation. All rights reserved.
+// Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
+
+using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Diagnostics;
@@ -6,22 +9,23 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net.Mail;
-using System.Security.Principal;
 using System.Threading.Tasks;
 using System.Web;
+using System.Web.Caching;
 using System.Web.Mvc;
 using NuGet;
-using NuGet.Services.Search.Models;
 using NuGetGallery.AsyncFileUpload;
 using NuGetGallery.Configuration;
 using NuGetGallery.Filters;
 using NuGetGallery.Helpers;
+using NuGetGallery.Infrastructure.Lucene;
 using NuGetGallery.Packaging;
 using PoliteCaptcha;
 
 namespace NuGetGallery
 {
-    public partial class PackagesController : AppController
+    public partial class PackagesController
+        : AppController
     {
         // TODO: add support for URL-based package submission
         // TODO: add support for uploading logos and screenshots
@@ -30,7 +34,6 @@ namespace NuGetGallery
         private readonly IAutomaticallyCuratePackageCommand _autoCuratedPackageCmd;
         private readonly IAppConfiguration _config;
         private readonly IMessageService _messageService;
-        private readonly INuGetExeDownloaderService _nugetExeDownloaderService;
         private readonly IPackageService _packageService;
         private readonly IPackageFileService _packageFileService;
         private readonly ISearchService _searchService;
@@ -46,7 +49,6 @@ namespace NuGetGallery
             IMessageService messageService,
             ISearchService searchService,
             IAutomaticallyCuratePackageCommand autoCuratedPackageCmd,
-            INuGetExeDownloaderService nugetExeDownloaderService,
             IPackageFileService packageFileService,
             IEntitiesContext entitiesContext,
             IAppConfiguration config,
@@ -59,7 +61,6 @@ namespace NuGetGallery
             _messageService = messageService;
             _searchService = searchService;
             _autoCuratedPackageCmd = autoCuratedPackageCmd;
-            _nugetExeDownloaderService = nugetExeDownloaderService;
             _packageFileService = packageFileService;
             _entitiesContext = entitiesContext;
             _config = config;
@@ -99,7 +100,7 @@ namespace NuGetGallery
                 return new HttpStatusCodeResult(403, "Forbidden");
             }
 
-            // To do as much successful cancellation as possible, Will not batch, but will instead try to cancel 
+            // To do as much successful cancellation as possible, Will not batch, but will instead try to cancel
             // pending edits 1 at a time, starting with oldest first.
             var pendingEdits = _entitiesContext.Set<PackageEdit>()
                 .Where(pe => pe.PackageKey == package.Key)
@@ -196,6 +197,12 @@ namespace NuGetGallery
                     ModelState.AddModelError(String.Empty, ipex.Message);
                     return View();
                 }
+                catch (InvalidDataException idex)
+                {
+                    idex.Log();
+                    ModelState.AddModelError(String.Empty, idex.Message);
+                    return View();
+                }
                 catch (Exception ex)
                 {
                     ex.Log();
@@ -218,11 +225,11 @@ namespace NuGetGallery
                 }
 
                 // Check min client version
-                if (nuGetPackage.Metadata.MinClientVersion > typeof(Manifest).Assembly.GetName().Version)
+                if (nuGetPackage.Metadata.MinClientVersion > new Version("3.0.0.0"))
                 {
                     ModelState.AddModelError(
-                        String.Empty, 
-                        String.Format(
+                        string.Empty,
+                        string.Format(
                             CultureInfo.CurrentCulture,
                             Strings.UploadPackage_MinClientVersionOutOfRange,
                             nuGetPackage.Metadata.MinClientVersion));
@@ -233,7 +240,7 @@ namespace NuGetGallery
                 if (packageRegistration != null && !packageRegistration.Owners.AnySafe(x => x.Key == currentUser.Key))
                 {
                     ModelState.AddModelError(
-                        String.Empty, String.Format(CultureInfo.CurrentCulture, Strings.PackageIdNotAvailable, packageRegistration.Id));
+                        string.Empty, string.Format(CultureInfo.CurrentCulture, Strings.PackageIdNotAvailable, packageRegistration.Id));
                     return View();
                 }
 
@@ -241,8 +248,8 @@ namespace NuGetGallery
                 if (package != null)
                 {
                     ModelState.AddModelError(
-                        String.Empty,
-                        String.Format(
+                        string.Empty,
+                        string.Format(
                             CultureInfo.CurrentCulture, Strings.PackageExistsAndCannotBeModified, package.PackageRegistration.Id, package.Version));
                     return View();
                 }
@@ -253,10 +260,10 @@ namespace NuGetGallery
             return RedirectToRoute(RouteName.VerifyPackage);
         }
 
-        public virtual ActionResult DisplayPackage(string id, string version)
+        public virtual async Task<ActionResult> DisplayPackage(string id, string version)
         {
             string normalized = SemanticVersionExtensions.Normalize(version);
-            if (!String.Equals(version, normalized))
+            if (!string.Equals(version, normalized))
             {
                 // Permanent redirect to the normalized one (to avoid multiple URLs for the same content)
                 return RedirectToActionPermanent("DisplayPackage", new { id = id, version = normalized });
@@ -272,7 +279,8 @@ namespace NuGetGallery
 
             if (package.IsOwner(User))
             {
-                // Tell logged-in package owners not to cache the package page, so they won't be confused about the state of pending edits.
+                // Tell logged-in package owners not to cache the package page,
+                // so they won't be confused about the state of pending edits.
                 Response.Cache.SetCacheability(HttpCacheability.NoCache);
                 Response.Cache.SetNoStore();
                 Response.Cache.SetMaxAge(TimeSpan.Zero);
@@ -283,6 +291,37 @@ namespace NuGetGallery
                 {
                     model.SetPendingMetadata(pendingMetadata);
                 }
+            }
+
+            var externalSearchService = _searchService as ExternalSearchService;
+            if (_searchService.ContainsAllVersions && externalSearchService != null)
+            {
+                var isIndexedCacheKey = string.Format("IsIndexed_{0}_{1}", package.PackageRegistration.Id, package.Version);
+                var isIndexed = HttpContext.Cache.Get(isIndexedCacheKey) as bool?;
+                if (!isIndexed.HasValue)
+                {
+                    var searchFilter = SearchAdaptor.GetSearchFilter(
+                            "id:\"" + package.PackageRegistration.Id + "\" AND version:\"" + package.Version + "\"",
+                            1, null, SearchFilter.ODataSearchContext);
+                    var results = await externalSearchService.RawSearch(searchFilter);
+
+                    isIndexed = results.Hits > 0;
+
+                    var expiration = Cache.NoAbsoluteExpiration;
+                    if (!isIndexed.Value)
+                    {
+                        expiration = DateTime.UtcNow.Add(TimeSpan.FromSeconds(30));
+                    }
+
+                    HttpContext.Cache.Add(isIndexedCacheKey,
+                        isIndexed,
+                        null,
+                        expiration,
+                        Cache.NoSlidingExpiration,
+                        CacheItemPriority.Default, null);
+                }
+
+                model.IsIndexed = isIndexed;
             }
 
             ViewBag.FacebookAppID = _config.FacebookAppId;
@@ -296,14 +335,44 @@ namespace NuGetGallery
                 page = 1;
             }
 
-            q = (q ?? "").Trim();
+            q = (q ?? string.Empty).Trim();
 
-            var searchFilter = SearchAdaptor.GetSearchFilter(q, page, sortOrder: null, context: SearchFilter.UISearchContext);
-            var results = await _searchService.Search(searchFilter);
+            SearchResults results;
+
+            // fetch most common query from cache to relieve load on the search service
+            if (string.IsNullOrEmpty(q) && page == 1)
+            {
+                var cachedResults = HttpContext.Cache.Get("DefaultSearchResults");
+                if (cachedResults == null)
+                {
+                    var searchFilter = SearchAdaptor.GetSearchFilter(q, page, null, SearchFilter.UISearchContext);
+                    results = await _searchService.Search(searchFilter);
+
+                    // note: this is a per instance cache
+                    HttpContext.Cache.Add(
+                        "DefaultSearchResults",
+                        results,
+                        null,
+                        DateTime.UtcNow.AddMinutes(10),
+                        Cache.NoSlidingExpiration,
+                        CacheItemPriority.Default, null);
+                }
+                else
+                {
+                    // default for /packages view
+                    results = (SearchResults)cachedResults;
+                }
+            }
+            else
+            {
+                var searchFilter = SearchAdaptor.GetSearchFilter(q, page, null, SearchFilter.UISearchContext);
+                results = await _searchService.Search(searchFilter);
+            }
+
             int totalHits = results.Hits;
             if (page == 1 && !results.Data.Any())
             {
-                // In the event the index wasn't updated, we may get an incorrect count. 
+                // In the event the index wasn't updated, we may get an incorrect count.
                 totalHits = 0;
             }
 
@@ -326,7 +395,7 @@ namespace NuGetGallery
             ReportPackageReason.IsFraudulent,
             ReportPackageReason.ViolatesALicenseIOwn,
             ReportPackageReason.ContainsMaliciousCode,
-            ReportPackageReason.HasABugOrFailedToInstall,          
+            ReportPackageReason.HasABugOrFailedToInstall,
             ReportPackageReason.Other
         };
 
@@ -354,7 +423,7 @@ namespace NuGetGallery
                 // If user logged on in as owner a different tab, then clicked the link, we can redirect them to ReportMyPackage
                 if (package.IsOwner(user))
                 {
-                    return RedirectToAction("ReportMyPackage", new {id, version});
+                    return RedirectToAction("ReportMyPackage", new { id, version });
                 }
 
                 if (user.Confirmed)
@@ -363,11 +432,11 @@ namespace NuGetGallery
                 }
             }
 
-            ViewData[Constants.ReturnUrlViewDataKey] = Url.Action("ReportMyPackage", new {id, version});
+            ViewData[Constants.ReturnUrlViewDataKey] = Url.Action("ReportMyPackage", new { id, version });
             return View(model);
         }
 
-        private static readonly ReportPackageReason[] ReportMyPackageReasons = new[] {
+        private static readonly ReportPackageReason[] ReportMyPackageReasons = {
             ReportPackageReason.ContainsPrivateAndConfidentialData,
             ReportPackageReason.PublishedWithWrongVersion,
             ReportPackageReason.ReleasedInPublicByAccident,
@@ -401,6 +470,7 @@ namespace NuGetGallery
                 PackageId = id,
                 PackageVersion = package.Version,
                 CopySender = true,
+                Signature = user.Username
             };
 
             return View(model);
@@ -446,10 +516,10 @@ namespace NuGetGallery
                 Reason = EnumHelper.GetDescription(reportForm.Reason.Value),
                 RequestingUser = user,
                 Url = Url,
-                CopySender = reportForm.CopySender
+                CopySender = reportForm.CopySender,
+                Signature = reportForm.Signature
             };
-            _messageService.ReportAbuse(request
-                );
+            _messageService.ReportAbuse(request);
 
             TempData["Message"] = "Your abuse report has been sent to the gallery operators.";
             return Redirect(Url.Package(id, version));
@@ -539,21 +609,21 @@ namespace NuGetGallery
             var user = GetCurrentUser();
             var fromAddress = new MailAddress(user.EmailAddress, user.Username);
             _messageService.SendContactOwnersMessage(
-                fromAddress, 
-                package, 
-                contactForm.Message, 
+                fromAddress,
+                package,
+                contactForm.Message,
                 Url.Action(
-                    actionName: "Account", 
-                    controllerName: "Users", 
-                    routeValues: null, 
-                    protocol: Request.Url.Scheme), 
+                    actionName: "Account",
+                    controllerName: "Users",
+                    routeValues: null,
+                    protocol: Request.Url.Scheme),
                 contactForm.CopySender);
 
             string message = String.Format(CultureInfo.CurrentCulture, "Your message has been sent to the owners of {0}.", id);
             TempData["Message"] = message;
             return RedirectToAction(
-                actionName: "DisplayPackage", 
-                controllerName: "Packages", 
+                actionName: "DisplayPackage",
+                controllerName: "Packages",
                 routeValues: new
                 {
                     id,
@@ -568,9 +638,9 @@ namespace NuGetGallery
         }
 
         [Authorize]
-        public virtual ActionResult ManagePackageOwners(string id, string version)
+        public virtual ActionResult ManagePackageOwners(string id)
         {
-            var package = _packageService.FindPackageByIdAndVersion(id, version);
+            var package = _packageService.FindPackageByIdAndVersion(id, string.Empty);
             if (package == null)
             {
                 return HttpNotFound();
@@ -657,7 +727,7 @@ namespace NuGetGallery
                 formData.PackageId = package.PackageRegistration.Id;
                 formData.PackageTitle = package.Title;
                 formData.Version = package.Version;
-                
+
                 var packageRegistration = _packageService.FindPackageRegistrationById(id);
                 formData.PackageVersions = packageRegistration.Packages
                         .OrderByDescending(p => new SemanticVersion(p.Version), Comparer<SemanticVersion>.Create((a, b) => a.CompareTo(b)))
@@ -737,7 +807,7 @@ namespace NuGetGallery
             }
             TempData["Message"] = String.Format(
                 CultureInfo.CurrentCulture,
-                "The package has been {0}. It may take several hours for this change to propagate through our system.", 
+                "The package has been {0}. It may take several hours for this change to propagate through our system.",
                 action);
 
             // Update the index
@@ -835,7 +905,7 @@ namespace NuGetGallery
                 }
                 Debug.Assert(nugetPackage != null);
 
-                // Rule out problem scenario with multiple tabs - verification request (possibly with edits) was submitted by user 
+                // Rule out problem scenario with multiple tabs - verification request (possibly with edits) was submitted by user
                 // viewing a different package to what was actually most recently uploaded
                 if (!(String.IsNullOrEmpty(formData.Id) || String.IsNullOrEmpty(formData.Version)))
                 {
@@ -892,13 +962,6 @@ namespace NuGetGallery
 
                 // tell Lucene to update index for the new package
                 _indexingService.UpdateIndex();
-
-                // If we're pushing a new stable version of NuGet.CommandLine, update the extracted executable.
-                if (package.PackageRegistration.Id.Equals(Constants.NuGetCommandLinePackageId, StringComparison.OrdinalIgnoreCase) &&
-                    package.IsLatestStable)
-                {
-                    await _nugetExeDownloaderService.UpdateExecutableAsync(nugetPackage);
-                }
             }
 
             // delete the uploaded binary in the Uploads container
@@ -921,6 +984,10 @@ namespace NuGetGallery
             catch (InvalidPackageException ipex)
             {
                 caught = ipex.AsUserSafeException();
+            }
+            catch (InvalidDataException idex)
+            {
+                caught = idex.AsUserSafeException();
             }
             catch (Exception ex)
             {

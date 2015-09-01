@@ -1,4 +1,6 @@
-﻿using System;
+﻿// Copyright (c) .NET Foundation. All rights reserved.
+// Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using NuGet;
@@ -24,6 +26,7 @@ namespace NuGetGallery
                                   select new DisplayPackageViewModel(p, isVersionHistory: true);
             }
             DownloadCount = package.DownloadCount;
+            LastEdited = package.LastEdited;
         }
 
         public void SetPendingMetadata(PackageEdit pendingMetadata)
@@ -54,6 +57,7 @@ namespace NuGetGallery
 
         public bool HasPendingMetadata { get; private set; }
         public bool IsLastEditFailed { get; private set; }
+        public DateTime? LastEdited { get; set; }
 
         public bool HasNewerPrerelease
         {
@@ -62,5 +66,7 @@ namespace NuGetGallery
                 return PackageVersions.Any(pv => pv.LatestVersion && !pv.LatestStableVersion);
             }
         }
+
+        public bool? IsIndexed { get; set; }
     }
 }

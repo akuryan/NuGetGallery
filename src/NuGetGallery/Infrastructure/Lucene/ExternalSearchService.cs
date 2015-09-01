@@ -1,32 +1,32 @@
-﻿using System;
+﻿// Copyright (c) .NET Foundation. All rights reserved.
+// Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
+
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using System.Globalization;
 using System.Linq;
 using System.Net;
-using System.Net.Http;
-using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Web;
 using Newtonsoft.Json.Linq;
 using NuGet.Services.Search.Client;
-using NuGet.Services.Search.Models;
 using NuGetGallery.Configuration;
 using NuGetGallery.Diagnostics;
-using NuGetGallery.Infrastructure;
 
 namespace NuGetGallery.Infrastructure.Lucene
 {
     public class ExternalSearchService : ISearchService, IIndexingService, IRawSearchService
     {
         public static readonly string SearchRoundtripTimePerfCounter = "SearchRoundtripTime";
-        
-        private SearchClient _client;
+
+        private static IEndpointHealthIndicatorStore _healthIndicatorStore;
+        private static SearchClient _client;
+
         private JObject _diagCache;
-        
+
         public Uri ServiceUri { get; private set; }
-        
+
         protected IDiagnosticsSource Trace { get; private set; }
 
         public string IndexPath
@@ -43,7 +43,8 @@ namespace NuGetGallery.Infrastructure.Lucene
 
         public ExternalSearchService(IAppConfiguration config, IDiagnosticsService diagnostics)
         {
-            ServiceUri = config.SearchServiceUri;
+            ServiceUri = config.ServiceDiscoveryUri;
+
             Trace = diagnostics.SafeGetSource("ExternalSearchService");
 
             // Extract credentials
@@ -66,7 +67,15 @@ namespace NuGetGallery.Infrastructure.Lucene
                 }.Uri;
             }
 
-            _client = new SearchClient(ServiceUri, credentials, new TracingHttpHandler(Trace));
+            // note: intentionally not locking the next two assignments to avoid blocking calls
+            if (_healthIndicatorStore == null)
+            {
+                _healthIndicatorStore = new BaseUrlHealthIndicatorStore(new AppInsightsHealthIndicatorLogger());
+            }
+            if (_client == null)
+            {
+                _client = new SearchClient(ServiceUri, config.SearchServiceResourceType, credentials, _healthIndicatorStore, new TracingHttpHandler(Trace));
+            }
         }
 
         private static readonly Task<bool> _exists = Task.FromResult(true);
@@ -102,8 +111,9 @@ namespace NuGetGallery.Infrastructure.Lucene
                 isLuceneQuery: raw,
                 countOnly: filter.CountOnly,
                 explain: false,
-                getAllVersions: filter.IncludeAllVersions);
-			sw.Stop();
+                getAllVersions: filter.IncludeAllVersions,
+                supportedFramework: filter.SupportedFramework);
+            sw.Stop();
 
             SearchResults results = null;
             if (result.IsSuccessStatusCode)
@@ -214,7 +224,7 @@ namespace NuGetGallery.Infrastructure.Lucene
                     })
                    .ToArray();
 
-            var frameworks = 
+            var frameworks =
                 doc.Value<JArray>("SupportedFrameworks")
                    .Select(v => new PackageFramework() { TargetFramework = v.Value<string>() })
                    .ToArray();

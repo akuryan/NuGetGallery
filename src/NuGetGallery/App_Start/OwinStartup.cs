@@ -1,19 +1,26 @@
-﻿using System;
+﻿// Copyright (c) .NET Foundation. All rights reserved.
+// Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
+
+using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
+using System.Threading.Tasks;
 using System.Web;
-using Owin;
-using Ninject;
+using System.Web.Mvc;
+using Elmah;
+using Microsoft.ApplicationInsights;
+using Microsoft.ApplicationInsights.Extensibility;
 using Microsoft.Owin;
 using Microsoft.Owin.Logging;
-using Microsoft.Owin.Extensions;
 using Microsoft.Owin.Security;
 using Microsoft.Owin.Security.Cookies;
 using NuGetGallery.Authentication;
-using NuGetGallery.Configuration;
-using System.Security.Claims;
 using NuGetGallery.Authentication.Providers;
 using NuGetGallery.Authentication.Providers.Cookie;
+using NuGetGallery.Configuration;
+using NuGetGallery.Infrastructure;
+using Owin;
 
 [assembly: OwinStartup(typeof(NuGetGallery.OwinStartup))]
 
@@ -21,15 +28,41 @@ namespace NuGetGallery
 {
     public class OwinStartup
     {
+        public static bool HasRun { get; private set; }
+
         // This method is auto-detected by the OWIN pipeline. DO NOT RENAME IT!
         public static void Configuration(IAppBuilder app)
         {
+            // Tune ServicePointManager
+            // (based on http://social.technet.microsoft.com/Forums/en-US/windowsazuredata/thread/d84ba34b-b0e0-4961-a167-bbe7618beb83 and https://msdn.microsoft.com/en-us/library/system.net.servicepointmanager.aspx)
+            ServicePointManager.DefaultConnectionLimit = 500;
+            ServicePointManager.UseNagleAlgorithm = false;
+            ServicePointManager.Expect100Continue = false;
+
+            // Register IoC
+            app.UseAutofacInjection();
+            var dependencyResolver = DependencyResolver.Current;
+
+            // Register Elmah
+            var elmahServiceCenter = new DependencyResolverServiceProviderAdapter(dependencyResolver);
+            ServiceCenter.Current = _ => elmahServiceCenter;
+
             // Get config
-            var config = Container.Kernel.Get<ConfigurationService>();
-            var auth = Container.Kernel.Get<AuthenticationService>();
-            
+            var config = dependencyResolver.GetService<ConfigurationService>();
+            var auth = dependencyResolver.GetService<AuthenticationService>();
+
+            // Setup telemetry
+            var instrumentationKey = config.Current.AppInsightsInstrumentationKey;
+            if (!string.IsNullOrEmpty(instrumentationKey))
+            {
+                TelemetryConfiguration.Active.InstrumentationKey = instrumentationKey;
+            }
+
             // Configure logging
             app.SetLoggerFactory(new DiagnosticsLoggerFactory());
+
+            // Remove X-AspNetMvc-Version header
+            MvcHandler.DisableMvcResponseHeader = true;
 
             if (config.Current.RequireSSL)
             {
@@ -48,7 +81,7 @@ namespace NuGetGallery
 
             // Attach external sign-in cookie middleware
             app.SetDefaultSignInAsAuthenticationType(AuthenticationTypes.External);
-            app.UseCookieAuthentication(new CookieAuthenticationOptions()
+            app.UseCookieAuthentication(new CookieAuthenticationOptions
             {
                 AuthenticationType = AuthenticationTypes.External,
                 AuthenticationMode = AuthenticationMode.Passive,
@@ -68,6 +101,46 @@ namespace NuGetGallery
             {
                 auther.Startup(config, app);
             }
+
+            // Catch unobserved exceptions from threads before they cause IIS to crash:
+            TaskScheduler.UnobservedTaskException += (sender, exArgs) =>
+            {
+                // Send to AppInsights
+                try
+                {
+                    var telemetryClient = new TelemetryClient();
+                    telemetryClient.TrackException(exArgs.Exception, new Dictionary<string, string>()
+                    {
+                        {"ExceptionOrigin", "UnobservedTaskException"}
+                    });
+                }
+                catch (Exception)
+                {
+                    // this is a tragic moment... swallow Exception to prevent crashing IIS
+                }
+
+                // Send to ELMAH
+                try
+                {
+                    HttpContext current = HttpContext.Current;
+                    if (current != null)
+                    {
+                        var errorSignal = ErrorSignal.FromContext(current);
+                        if (errorSignal != null)
+                        {
+                            errorSignal.Raise(exArgs.Exception, current);
+                        }
+                    }
+                }
+                catch (Exception)
+                {
+                    // more tragedy... swallow Exception to prevent crashing IIS
+                }
+
+                exArgs.SetObserved();
+            };
+
+            HasRun = true;
         }
     }
 }

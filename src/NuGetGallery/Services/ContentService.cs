@@ -1,4 +1,6 @@
-﻿using System;
+﻿// Copyright (c) .NET Foundation. All rights reserved.
+// Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -24,6 +26,8 @@ namespace NuGetGallery
         public static readonly string HtmlContentFileExtension = ".html";
         public static readonly string MarkdownContentFileExtension = ".md";
 
+        public static readonly string JsonContentFileExtension = ".json";
+
         public IFileStorageService FileStorage { get; protected set; }
 
         protected ConcurrentDictionary<string, ContentItem> ContentCache { get { return _contentCache; } }
@@ -48,6 +52,10 @@ namespace NuGetGallery
             FileStorage = fileStorage;
             Trace = diagnosticsService.GetSource("ContentService");
         }
+        public void ClearCache()
+        {
+            _contentCache.Clear();
+        }
 
         public Task<IHtmlString> GetContentItemAsync(string name, TimeSpan expiresIn)
         {
@@ -55,12 +63,36 @@ namespace NuGetGallery
             {
                 throw new ArgumentException(String.Format(CultureInfo.CurrentCulture, Strings.ParameterCannotBeNullOrEmpty, "name"), "name");
             }
+            
+            return GetContentItemCore(
+                name, new [] { 
+                    HtmlContentFileExtension,
+                    MarkdownContentFileExtension,
+                    JsonContentFileExtension }, 
+                expiresIn);
+        }
 
-            return GetContentItemCore(name, expiresIn);
+        public Task<IHtmlString> GetContentItemAsync(string name, string extension, TimeSpan expiresIn)
+        {
+            if (String.IsNullOrEmpty(name))
+            {
+                throw new ArgumentException(String.Format(CultureInfo.CurrentCulture, Strings.ParameterCannotBeNullOrEmpty, "name"), "name");
+            }
+            if (String.IsNullOrEmpty(extension))
+            {
+                throw new ArgumentException(String.Format(CultureInfo.CurrentCulture, Strings.ParameterCannotBeNullOrEmpty, "extension"), "extension");
+            }
+
+            if (!extension.StartsWith(".", StringComparison.OrdinalIgnoreCase))
+            {
+                extension = "." + extension;
+            }
+
+            return GetContentItemCore(name, new[] { extension }, expiresIn);
         }
 
         // This NNNCore pattern allows arg checking to happen synchronously, before starting the async operation.
-        private async Task<IHtmlString> GetContentItemCore(string name, TimeSpan expiresIn)
+        private async Task<IHtmlString> GetContentItemCore(string name, string[] extensions, TimeSpan expiresIn)
         {
             using (Trace.Activity("GetContentItem " + name))
             {
@@ -73,10 +105,9 @@ namespace NuGetGallery
                 Trace.Verbose("Cache Expired.");
 
                 // Get the file from the content service
-                string htmlFileName = name + HtmlContentFileExtension;
-                string markdownFileName = name + MarkdownContentFileExtension;
+                var filenames = extensions.Select(extension => name + extension).ToArray();
 
-                foreach (var filename in new[] { htmlFileName, markdownFileName })
+                foreach (var filename in filenames)
                 {
                     ContentItem item = await RefreshContentFromFile(filename, cachedItem, expiresIn);
                     if (item != null)
@@ -136,22 +167,18 @@ namespace NuGetGallery
                                 using (var reader = new StreamReader(stream))
                                 {
                                     string text = await reader.ReadToEndAsync();
-                                    string looseHtml;
+                                    string content;
 
-                                    if (fileName.EndsWith(".html"))
+                                    if (fileName.EndsWith(".md"))
                                     {
-                                        looseHtml = text;
-                                    }
-                                    else if (fileName.EndsWith(".md"))
-                                    {
-                                        looseHtml = new Markdown().Transform(text);
+                                        content = new Markdown().Transform(text);
                                     }
                                     else
                                     {
-                                        looseHtml = "Unknown Content File Type";
+                                        content = text;
                                     }
 
-                                    IHtmlString html = new HtmlString(looseHtml.Trim());
+                                    IHtmlString html = new HtmlString(content.Trim());
 
                                     // Prep the new item for the cache
                                     var expiryTime = DateTime.UtcNow + expiresIn;

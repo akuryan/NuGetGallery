@@ -1,4 +1,6 @@
-﻿using System;
+﻿// Copyright (c) .NET Foundation. All rights reserved.
+// Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
+using System;
 using System.Collections.Generic;
 using System.Data.Entity;
 using System.Linq;
@@ -302,6 +304,7 @@ namespace NuGetGallery
 
             package.Listed = true;
             package.LastUpdated = DateTime.UtcNow;
+            package.LastEdited = DateTime.UtcNow;
 
             UpdateIsLatest(package.PackageRegistration);
 
@@ -324,6 +327,7 @@ namespace NuGetGallery
 
             package.Listed = false;
             package.LastUpdated = DateTime.UtcNow;
+            package.LastEdited = DateTime.UtcNow;
 
             if (package.IsLatest || package.IsLatestStable)
             {
